@@ -1,0 +1,11 @@
+{
+    "name": "family-archive",
+    "version": "1.0.0",
+    "scripts": {
+        "dev:backend": "cd backend && mvn spring-boot:run",
+        "build:backend": "cd backend && mvn clean package",
+        "test:backend": "cd backend && mvn test",
+        "dev:frontend": "cd frontend && live-server --port=3000",
+        "build": "npm run build:backend"
+    }
+}
