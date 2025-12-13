@@ -34,10 +34,7 @@ const FamilyTreeComponent = {
                 <div class="custom-edit-form-container">
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
-                                <i class="bi" :class="editFormMode === 'edit' ? 'bi-pencil' : 'bi-eye'"></i> 
-                                {{ editFormMode === 'edit' ? 'Редактировать персону' : 'Просмотр персоны' }}
-                            </h5>
+                            <h5 class="mb-0"><i class="bi bi-pencil"></i> Редактировать персону</h5>
                             <button type="button" class="btn-close" @click="closeEditForm"></button>
                         </div>
                         <div class="card-body">
@@ -104,30 +101,9 @@ const FamilyTreeComponent = {
                                     </div>
                                 </div>
 
-                                <!-- Правая колонка: форма редактирования/просмотра и связи -->
+                                <!-- Правая колонка: форма редактирования и связи -->
                                 <div class="col-lg-8">
-                                    <!-- Режим просмотра - только связи (родители, дети), без дублирования данных -->
-                                    <div v-if="editFormMode === 'view'">
-                                        <!-- Кнопка закрытия -->
-                                        <div class="d-flex justify-content-end mb-3">
-                                            <button type="button" 
-                                                    class="btn btn-outline-secondary"
-                                                    @click="closeEditForm">
-                                                <i class="bi bi-x-lg"></i> Закрыть
-                                            </button>
-                                        </div>
-                                        
-                                        <!-- Биография -->
-                                        <div class="card mb-3" v-if="editFormData.biography">
-                                            <div class="card-body">
-                                                <h6><i class="bi bi-book"></i> Биография</h6>
-                                                <p class="mb-0" style="text-align: justify; white-space: pre-wrap;">{{ editFormData.biography }}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Режим редактирования -->
-                                    <form v-else @submit.prevent="saveEditForm">
+                                    <form @submit.prevent="saveEditForm">
                                         <div class="row">
                                             <div class="col-md-4">
                                                 <div class="mb-3">
@@ -191,18 +167,10 @@ const FamilyTreeComponent = {
                                             </div>
                                         </div>
                                         
-                                        <div class="mb-3">
-                                            <label class="form-label">Биография</label>
-                                            <textarea v-model="editFormData.biography" 
-                                                      class="form-control" 
-                                                      rows="4"
-                                                      placeholder="Расскажите о жизни человека..."></textarea>
-                                        </div>
-                                        
                                         <div class="d-flex gap-2 justify-content-end mb-4">
                                             <button type="button" 
                                                     class="btn btn-outline-secondary"
-                                                    @click="switchToViewMode">
+                                                    @click="closeEditForm">
                                                 Отмена
                                             </button>
                                             <button type="submit" 
@@ -269,8 +237,6 @@ const FamilyTreeComponent = {
             error: null,
             persons: [],
             showEditForm: false,
-            editFormMode: 'view', // 'view' - просмотр, 'edit' - редактирование
-            preventEditFormOpen: false, // Флаг для предотвращения открытия формы при выборе "Детали"
             editFormData: {
                 id: null,
                 firstName: '',
@@ -469,25 +435,8 @@ const FamilyTreeComponent = {
             };
 
             editForm.prototype.show = function (node) {
-                // Определяем ID узла
-                let nodeId = null;
-                if (typeof node === 'number') {
-                    nodeId = node;
-                } else if (node && node.id) {
-                    nodeId = node.id;
-                } else if (node && node.pid) {
-                    nodeId = node.pid;
-                }
-
-                // Проверяем флаг - если установлен, значит был клик на "Детали"
-                if (self.preventEditFormOpen && nodeId) {
-                    console.log('✅ Пропускаем открытие формы, выполняется переадресация для ID:', nodeId);
-                    // Переадресация уже выполнена в onClick, просто не открываем форму
-                    return;
-                }
-
-                // Открываем форму с данными узла в режиме просмотра (по умолчанию)
-                self.openEditForm(node, 'view');
+                // Открываем форму с данными узла
+                self.openEditForm(node);
             };
 
             editForm.prototype.hide = function (shouldUpdateTheNode) {
@@ -502,20 +451,23 @@ const FamilyTreeComponent = {
             return new editForm();
         },
 
-        async openEditForm(node, mode = 'view') {
-            console.log('Открытие формы для узла:', node, 'режим:', mode);
-
+        getNodeId(node) {
             // Определяем ID узла - может быть передан как объект с id, или просто число
-            let nodeId = null;
             if (typeof node === 'number') {
-                nodeId = node;
+                return node;
             } else if (node && node.id) {
-                nodeId = node.id;
+                return node.id;
             } else if (node && typeof node === 'object') {
                 // Пытаемся найти ID в объекте
-                nodeId = node.id || node.nodeId || node.pid;
+                return node.id || node.nodeId || node.pid;
             }
+            return null;
+        },
 
+        openEditForm(node) {
+            console.log('Открытие формы редактирования для узла:', node);
+
+            const nodeId = this.getNodeId(node);
             if (!nodeId) {
                 console.error('Не удалось определить ID узла:', node);
                 this.editFormError = 'Не удалось определить узел';
@@ -525,55 +477,51 @@ const FamilyTreeComponent = {
 
             console.log('ID узла:', nodeId);
 
-            // Устанавливаем режим
-            this.editFormMode = mode;
-
-            try {
-                // Загружаем полную информацию о персоне с сервера, чтобы получить актуальные данные о родителях и супруге
-                const response = await axios.get(`http://localhost:8080/api/persons/${nodeId}`);
-                const person = response.data;
-
-                console.log('Загружена персона с сервера:', person);
-
-                // Заполняем форму данными
-                // Форматируем даты для input type="date"
-                let birthDate = '';
-                let deathDate = '';
-                if (person.birthDate) {
-                    birthDate = person.birthDate.includes('T')
-                        ? person.birthDate.split('T')[0]
-                        : person.birthDate;
-                }
-                if (person.deathDate) {
-                    deathDate = person.deathDate.includes('T')
-                        ? person.deathDate.split('T')[0]
-                        : person.deathDate;
-                }
-
-                this.editFormData = {
-                    id: person.id,
-                    firstName: person.firstName || '',
-                    lastName: person.lastName || '',
-                    middleName: person.middleName || '',
-                    gender: person.gender || '',
-                    birthDate: birthDate,
-                    deathDate: deathDate,
-                    biography: person.biography || ''
-                };
-
-                this.editFormError = null;
-                this.editFormSuccess = null;
-                this.editFormPerson = person;
-                this.showEditForm = true;
-
-                // Загружаем фото и детей
-                this.loadEditFormPhoto(person.id);
-                this.loadEditFormChildren(person.id);
-            } catch (error) {
-                console.error('Ошибка загрузки персоны:', error);
-                this.editFormError = 'Ошибка загрузки данных персоны: ' + (error.response?.data?.message || error.message);
-                this.showEditForm = true;
+            // Находим оригинальную персону по ID
+            const person = this.persons.find(p => p.id === nodeId);
+            if (!person) {
+                console.error('Персона не найдена для ID:', nodeId);
+                this.editFormError = 'Персона не найдена';
+                this.showEditForm = true; // Показываем форму даже с ошибкой
+                return;
             }
+
+            console.log('Найдена персона:', person);
+
+            // Заполняем форму данными
+            // Форматируем даты для input type="date"
+            let birthDate = '';
+            let deathDate = '';
+            if (person.birthDate) {
+                birthDate = person.birthDate.includes('T')
+                    ? person.birthDate.split('T')[0]
+                    : person.birthDate;
+            }
+            if (person.deathDate) {
+                deathDate = person.deathDate.includes('T')
+                    ? person.deathDate.split('T')[0]
+                    : person.deathDate;
+            }
+
+            this.editFormData = {
+                id: person.id,
+                firstName: person.firstName || '',
+                lastName: person.lastName || '',
+                middleName: person.middleName || '',
+                gender: person.gender || '',
+                birthDate: birthDate,
+                deathDate: deathDate,
+                biography: person.biography || ''
+            };
+
+            this.editFormError = null;
+            this.editFormSuccess = null;
+            this.editFormPerson = person;
+            this.showEditForm = true;
+
+            // Загружаем фото и детей
+            this.loadEditFormPhoto(person.id);
+            this.loadEditFormChildren(person.id);
         },
 
         async loadEditFormPhoto(personId) {
@@ -649,20 +597,11 @@ const FamilyTreeComponent = {
 
         closeEditForm() {
             this.showEditForm = false;
-            this.editFormMode = 'view'; // Сбрасываем режим
             this.editFormError = null;
             this.editFormSuccess = null;
             this.editFormPerson = {};
             this.editFormMainPhoto = null;
             this.editFormChildren = [];
-        },
-
-        switchToEditMode() {
-            this.editFormMode = 'edit';
-        },
-
-        switchToViewMode() {
-            this.editFormMode = 'view';
         },
 
         async saveEditForm() {
@@ -671,20 +610,14 @@ const FamilyTreeComponent = {
             this.editFormSuccess = null;
 
             try {
-                // Подготавливаем данные для API - отправляем ВСЕ поля, включая биографию и связи
+                // Подготавливаем данные для API
                 const personData = {
                     firstName: this.editFormData.firstName,
                     lastName: this.editFormData.lastName,
-                    middleName: this.editFormData.middleName || null,
+                    middleName: this.editFormData.middleName,
                     gender: this.editFormData.gender,
                     birthDate: this.editFormData.birthDate || null,
-                    deathDate: this.editFormData.deathDate || null,
-                    biography: this.editFormData.biography || null,
-                    // Сохраняем связи с родителями
-                    parent1: this.editFormPerson.parent1 ? { id: this.editFormPerson.parent1.id } : null,
-                    parent2: this.editFormPerson.parent2 ? { id: this.editFormPerson.parent2.id } : null,
-                    // Сохраняем супруга, если есть
-                    spouseId: this.editFormPerson.spouse ? this.editFormPerson.spouse.id : null
+                    deathDate: this.editFormData.deathDate || null
                 };
 
                 // Обновляем персону через API
@@ -735,39 +668,14 @@ const FamilyTreeComponent = {
                 // Создаем кастомную форму редактирования
                 const customEditForm = this.createCustomEditForm();
 
-                // Сохраняем ссылку на компонент для использования в обработчиках
-                const self = this;
-
-                // Создаем SVG иконку для "Детали"
-                const detailsIcon = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="#aeaeae"/>
-                </svg>`;
-
-                // Обработчик для пункта "Детали"
-                const detailsHandler = (nodeId) => {
-                    console.log('✅ Клик на "Детали", ID:', nodeId);
-                    self.$router.push(`/persons/${nodeId}`);
-                };
-
                 // Создаем экземпляр дерева
                 this.family = new FamilyTree(treeElement, {
                     template: "main",
                     scaleInitial: FamilyTree.match.boundary,
                     mouseScrool: FamilyTree.action.zoom,
                     nodeMenu: {
-                        details: {
-                            icon: detailsIcon,
-                            text: "Детали",
-                            onClick: detailsHandler
-                        },
-                        edit: {
-                            text: "Редактировать",
-                            icon: FamilyTree.icon.edit(24, 24, '#aeaeae'),
-                            onClick: function (nodeId) {
-                                console.log('✅ Клик на "Редактировать", ID:', nodeId);
-                                self.openEditForm(nodeId, 'edit');
-                            }
-                        }
+                        details: { text: "Детали" },
+                        edit: { text: "Редактировать" }
                     },
                     nodeBinding: {
                         field_0: "years",
@@ -805,12 +713,31 @@ const FamilyTreeComponent = {
                     }
                 });
 
-
-                // Обработчик клика на узел - открываем форму в режиме просмотра
+                // Обработчик клика на узел - используем событие 'node-click' библиотеки
                 this.family.on('node-click', (sender, args) => {
+                    console.log('Клик на узел:', args);
                     if (args && args.node) {
-                        // Открываем форму в режиме просмотра
-                        self.openEditForm(args.node, 'view');
+                        this.openEditForm(args.node);
+                    }
+                });
+
+                // Обработчик выбора пункта меню
+                this.family.on('node-menu-click', (sender, args) => {
+                    console.log('Клик в меню узла:', args);
+                    if (!args || !args.node) return;
+
+                    const nodeId = this.getNodeId(args.node);
+                    if (!nodeId) {
+                        console.error('Не удалось определить ID узла:', args.node);
+                        return;
+                    }
+
+                    if (args.menuItem === 'details') {
+                        // Переход на страницу просмотра персоны
+                        this.$router.push(`/persons/${nodeId}`);
+                    } else if (args.menuItem === 'edit') {
+                        // Открытие формы редактирования
+                        this.openEditForm(args.node);
                     }
                 });
 
@@ -821,55 +748,28 @@ const FamilyTreeComponent = {
                     setTimeout(() => {
                         const treeSvg = treeElement.querySelector('svg');
                         if (treeSvg) {
-                            // Перехватываем клики на пункты меню "Детали" на уровне DOM
-                            // Используем делегирование событий на весь контейнер дерева
-                            const treeContainer = treeElement;
-                            treeContainer.addEventListener('click', (e) => {
+                            // Используем делегирование событий на весь SVG
+                            treeSvg.addEventListener('click', (e) => {
+                                // Ищем ближайший родительский элемент с data-id
                                 let target = e.target;
-                                // Ищем элемент меню "Детали"
-                                while (target && target !== treeContainer) {
-                                    // Проверяем, является ли это пунктом меню "Детали"
-                                    if (target.textContent && target.textContent.includes('Детали')) {
-                                        // Ищем родительский элемент с data-id узла
-                                        let parent = target.parentElement;
-                                        let nodeId = null;
-                                        while (parent && parent !== treeContainer) {
-                                            if (parent.getAttribute && parent.getAttribute('data-id')) {
-                                                nodeId = parseInt(parent.getAttribute('data-id'));
-                                                break;
-                                            }
-                                            // Также проверяем SVG элементы
-                                            const svgParent = parent.closest('svg');
-                                            if (svgParent) {
-                                                const nodeElement = svgParent.querySelector('[data-id]');
-                                                if (nodeElement) {
-                                                    nodeId = parseInt(nodeElement.getAttribute('data-id'));
-                                                    break;
-                                                }
-                                            }
-                                            parent = parent.parentElement;
-                                        }
+                                let nodeId = null;
 
-                                        if (nodeId) {
-                                            console.log('✅ Перехвачен клик на "Детали" через DOM, ID:', nodeId);
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            // Устанавливаем флаг
-                                            self.preventEditFormOpen = true;
-                                            // Выполняем переадресацию
-                                            self.$router.push(`/persons/${nodeId}`);
-                                            // Сбрасываем флаг
-                                            setTimeout(() => {
-                                                self.preventEditFormOpen = false;
-                                            }, 300);
-                                            return;
-                                        }
+                                // Поднимаемся по DOM дереву, ищем data-id
+                                while (target && target !== treeSvg) {
+                                    if (target.getAttribute && target.getAttribute('data-id')) {
+                                        nodeId = parseInt(target.getAttribute('data-id'));
+                                        break;
                                     }
                                     target = target.parentElement;
                                 }
-                            }, true); // Используем capture phase для раннего перехвата
 
-                            // Убрали обработчик клика на узел - форма редактирования открывается только через меню
+                                if (nodeId) {
+                                    console.log('Клик на узел с ID:', nodeId);
+                                    e.stopPropagation();
+                                    // Передаем ID напрямую, метод openEditForm сам найдет персону
+                                    self.openEditForm(nodeId);
+                                }
+                            });
 
                             // Делаем все узлы кликабельными
                             const allNodes = treeSvg.querySelectorAll('g');
