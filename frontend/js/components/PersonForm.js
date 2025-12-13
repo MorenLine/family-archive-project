@@ -36,18 +36,6 @@ const PersonForm = {
                                 <div class="row">
                                     <div class="col-md-4">
                                         <div class="mb-3">
-                                            <label class="form-label">Имя *</label>
-                                            <input v-model="person.firstName" 
-                                                   type="text" 
-                                                   class="form-control" 
-                                                   :class="{ 'is-invalid': errors.firstName }"
-                                                   placeholder="Введите имя"
-                                                   required>
-                                            <div class="invalid-feedback">{{ errors.firstName }}</div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="mb-3">
                                             <label class="form-label">Фамилия *</label>
                                             <input v-model="person.lastName" 
                                                    type="text" 
@@ -56,6 +44,18 @@ const PersonForm = {
                                                    placeholder="Введите фамилию"
                                                    required>
                                             <div class="invalid-feedback">{{ errors.lastName }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Имя *</label>
+                                            <input v-model="person.firstName" 
+                                                   type="text" 
+                                                   class="form-control" 
+                                                   :class="{ 'is-invalid': errors.firstName }"
+                                                   placeholder="Введите имя"
+                                                   required>
+                                            <div class="invalid-feedback">{{ errors.firstName }}</div>
                                         </div>
                                     </div>
                                     <div class="col-md-4">
@@ -125,7 +125,7 @@ const PersonForm = {
                                                 <option v-for="p in availableSpouses" 
                                                         :key="p.id" 
                                                         :value="p.id">
-                                                    {{ p.firstName }} {{ p.lastName }}
+                                                    {{ formatFullName(p) }}
                                                     <span v-if="p.birthDate">({{ formatYear(p.birthDate) }})</span>
                                                     <span v-if="p.spouse && p.spouse.id !== parseInt($route.params.id)" class="text-warning">* уже в браке</span>
                                                 </option>
@@ -162,7 +162,7 @@ const PersonForm = {
                                                     <option v-for="p in availableParents" 
                                                             :key="p.id" 
                                                             :value="p.id">
-                                                        {{ p.firstName }} {{ p.lastName }}
+                                                        {{ formatFullName(p) }}
                                                         <span v-if="p.birthDate">({{ formatYear(p.birthDate) }})</span>
                                                     </option>
                                                 </select>
@@ -176,7 +176,7 @@ const PersonForm = {
                                                     <option v-for="p in availableParents" 
                                                             :key="p.id" 
                                                             :value="p.id">
-                                                        {{ p.firstName }} {{ p.lastName }}
+                                                        {{ formatFullName(p) }}
                                                         <span v-if="p.birthDate">({{ formatYear(p.birthDate) }})</span>
                                                     </option>
                                                 </select>
@@ -816,6 +816,15 @@ const PersonForm = {
         formatYear(dateString) {
             if (!dateString) return '';
             return new Date(dateString).getFullYear();
+        },
+
+        formatFullName(person) {
+            if (!person) return '';
+            const parts = [];
+            if (person.lastName) parts.push(person.lastName);
+            if (person.firstName) parts.push(person.firstName);
+            if (person.middleName) parts.push(person.middleName);
+            return parts.join(' ') || 'Без имени';
         }
     }
 };

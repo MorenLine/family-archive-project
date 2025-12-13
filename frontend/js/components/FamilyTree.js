@@ -1,733 +1,930 @@
-const FamilyTree = {
+const FamilyTreeComponent = {
     template: `
-        <div class="family-tree-container">
-            <!-- Упрощенная шапка -->
-            <div class="card mb-3">
-                <div class="card-body">
-                    <h1 class="h4 mb-3">
-                        <i class="bi bi-diagram-3"></i> Генеалогическое древо
-                    </h1>
-                    
-                    <!-- Простой выбор персоны -->
-                    <div class="mb-3">
-                        <label class="form-label">
-                            Выберите корневую персону 
-                            <span v-if="treeType === 'both'" class="text-muted small">(необязательно для полного дерева)</span>:
-                        </label>
-                        <select v-model="selectedPersonId" @change="onPersonSelected" class="form-select">
-                            <option value="">-- Выберите персону --</option>
-                            <option v-for="person in allPersons" :key="person.id" :value="person.id">
-                                {{ person.firstName }} {{ person.lastName }}
-                                <span v-if="person.birthDate">({{ formatYear(person.birthDate) }})</span>
-                            </option>
-                        </select>
-                    </div>
-                    
-                    <div class="btn-group mb-3">
-                        <button class="btn btn-sm" :class="treeType === 'ancestors' ? 'btn-primary' : 'btn-outline-primary'"
-                                @click="setTreeType('ancestors')">
-                            Предки
-                        </button>
-                        <button class="btn btn-sm" :class="treeType === 'descendants' ? 'btn-primary' : 'btn-outline-primary'"
-                                @click="setTreeType('descendants')">
-                            Потомки
-                        </button>
-                        <button class="btn btn-sm" :class="treeType === 'both' ? 'btn-primary' : 'btn-outline-primary'"
-                                @click="setTreeType('both')">
-                            Полное
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Сообщения -->
-            <div v-if="!selectedPersonId && treeType !== 'both'" class="alert alert-info">
-                <i class="bi bi-info-circle"></i> Выберите персону для отображения древа
+        <div>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h1><i class="bi bi-diagram-3"></i> Семейное Древо</h1>
+                <button v-if="family" @click="refreshTree" class="btn btn-primary">
+                    <i class="bi bi-arrow-clockwise"></i> Обновить
+                </button>
             </div>
             
             <div v-if="loading" class="text-center py-5">
                 <div class="spinner-border text-primary" role="status">
                     <span class="visually-hidden">Загрузка...</span>
                 </div>
-                <p>Построение дерева...</p>
+                <p class="mt-2">Загрузка семейного дерева...</p>
             </div>
             
             <div v-else-if="error" class="alert alert-danger">
                 <i class="bi bi-exclamation-triangle"></i> {{ error }}
             </div>
             
-            <!-- Контейнер для дерева - ВСЕГДА присутствует в DOM -->
-            <div v-show="treeVisible" ref="treeWrapper">
-                <div class="card">
-                    <div class="card-body p-0">
-                        <div ref="treeContainer" style="width: 100%; height: 600px;"></div>
+            <div v-else-if="persons.length === 0" class="text-center text-muted py-5">
+                <i class="bi bi-diagram-3 display-1"></i>
+                <p class="mt-3">Нет данных для отображения семейного дерева</p>
+                <router-link to="/persons/new" class="btn btn-primary">
+                    Добавить первую персону
+                </router-link>
+            </div>
+            
+            <div v-else id="tree" class="family-tree-container"></div>
+            
+            <!-- Кастомная форма редактирования -->
+            <div v-if="showEditForm" class="custom-edit-form-overlay" @click.self="closeEditForm">
+                <div class="custom-edit-form-container">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-pencil"></i> Редактировать персону</h5>
+                            <button type="button" class="btn-close" @click="closeEditForm"></button>
+                        </div>
+                        <div class="card-body">
+                            <div v-if="editFormError" class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle"></i> {{ editFormError }}
+                            </div>
+                            <div v-if="editFormSuccess" class="alert alert-success">
+                                <i class="bi bi-check-circle"></i> {{ editFormSuccess }}
+                            </div>
+                            
+                            <div class="row">
+                                <!-- Левая колонка: фото и основная информация -->
+                                <div class="col-lg-4">
+                                    <div class="card mb-3">
+                                        <div class="card-body">
+                                            <!-- Основная фотография -->
+                                            <div class="text-center mb-4">
+                                                <div v-if="editFormMainPhoto" class="main-photo-container">
+                                                    <img :src="getPhotoUrl(editFormMainPhoto.fileName)" 
+                                                        :alt="editFormMainPhoto.description || 'Основное фото'"
+                                                        class="main-photo img-fluid rounded"
+                                                        style="width:100%; max-height:250px; object-fit:cover; cursor:pointer;"
+                                                        @click="openPhotoLightbox(editFormMainPhoto)">
+                                                </div>
+                                                <div v-else class="no-photo-placeholder">
+                                                    <i class="bi bi-camera display-1 text-muted"></i>
+                                                    <p class="text-muted mt-2">Нет фотографии</p>
+                                                </div>
+                                            </div>
+
+                                            <!-- Базовая информация -->
+                                            <div class="person-info">
+                                                <div class="d-flex align-items-center mb-3">
+                                                    <i :class="getGenderIcon(editFormData.gender)" class="me-2"></i>
+                                                    <span>{{ getGenderDisplay(editFormData.gender) }}</span>
+                                                </div>
+
+                                                <div class="info-item mb-2">
+                                                    <strong>Имя:</strong>
+                                                    <p class="mb-0">{{ editFormData.firstName }}</p>
+                                                </div>
+
+                                                <div class="info-item mb-2">
+                                                    <strong>Фамилия:</strong>
+                                                    <p class="mb-0">{{ editFormData.lastName }}</p>
+                                                </div>
+
+                                                <div class="info-item mb-2" v-if="editFormData.middleName">
+                                                    <strong>Отчество:</strong>
+                                                    <p class="mb-0">{{ editFormData.middleName }}</p>
+                                                </div>
+
+                                                <div class="info-item mb-2" v-if="editFormData.birthDate">
+                                                    <strong>Дата рождения:</strong>
+                                                    <p class="mb-0">{{ formatDate(editFormData.birthDate) }}</p>
+                                                </div>
+
+                                                <div class="info-item mb-2" v-if="editFormData.deathDate">
+                                                    <strong>Дата смерти:</strong>
+                                                    <p class="mb-0">{{ formatDate(editFormData.deathDate) }}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Правая колонка: форма редактирования и связи -->
+                                <div class="col-lg-8">
+                                    <form @submit.prevent="saveEditForm">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Имя *</label>
+                                                    <input v-model="editFormData.firstName" 
+                                                           type="text" 
+                                                           class="form-control" 
+                                                           required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Фамилия *</label>
+                                                    <input v-model="editFormData.lastName" 
+                                                           type="text" 
+                                                           class="form-control"
+                                                           required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Отчество</label>
+                                                    <input v-model="editFormData.middleName" 
+                                                           type="text" 
+                                                           class="form-control">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Пол *</label>
+                                                    <select v-model="editFormData.gender" 
+                                                            class="form-select"
+                                                            required>
+                                                        <option value="">-- Выберите пол --</option>
+                                                        <option value="MALE">Мужской</option>
+                                                        <option value="FEMALE">Женский</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Дата рождения</label>
+                                                    <input v-model="editFormData.birthDate" 
+                                                           type="date" 
+                                                           class="form-control"
+                                                           :max="today">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Дата смерти</label>
+                                                    <input v-model="editFormData.deathDate" 
+                                                           type="date" 
+                                                           class="form-control"
+                                                           :min="editFormData.birthDate"
+                                                           :max="today">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="d-flex gap-2 justify-content-end mb-4">
+                                            <button type="button" 
+                                                    class="btn btn-outline-secondary"
+                                                    @click="closeEditForm">
+                                                Отмена
+                                            </button>
+                                            <button type="submit" 
+                                                    class="btn btn-primary"
+                                                    :disabled="editFormLoading">
+                                                <span v-if="editFormLoading" class="spinner-border spinner-border-sm me-2"></span>
+                                                <i v-else class="bi bi-check-lg"></i>
+                                                Сохранить
+                                            </button>
+                                        </div>
+                                    </form>
+
+                                    <!-- Родители -->
+                                    <div class="card mb-3" v-if="editFormPerson.parent1 || editFormPerson.parent2">
+                                        <div class="card-body">
+                                            <h6><i class="bi bi-people"></i> Родители</h6>
+                                            <div class="list-group">
+                                                <div v-if="editFormPerson.parent1" 
+                                                     class="list-group-item list-group-item-action"
+                                                     style="cursor: pointer;"
+                                                     @click="viewPersonInTree(editFormPerson.parent1.id)">
+                                                    <i class="bi bi-gender-male text-primary me-2"></i>
+                                                    {{ editFormPerson.parent1.firstName }} {{ editFormPerson.parent1.lastName }}
+                                                </div>
+                                                <div v-if="editFormPerson.parent2" 
+                                                     class="list-group-item list-group-item-action"
+                                                     style="cursor: pointer;"
+                                                     @click="viewPersonInTree(editFormPerson.parent2.id)">
+                                                    <i class="bi bi-gender-female text-danger me-2"></i>
+                                                    {{ editFormPerson.parent2.firstName }} {{ editFormPerson.parent2.lastName }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Дети -->
+                                    <div class="card mb-3" v-if="editFormChildren.length > 0">
+                                        <div class="card-body">
+                                            <h6><i class="bi bi-people"></i> Дети</h6>
+                                            <div class="list-group">
+                                                <div v-for="child in editFormChildren" 
+                                                     :key="child.id"
+                                                     class="list-group-item list-group-item-action"
+                                                     style="cursor: pointer;"
+                                                     @click="viewPersonInTree(child.id)">
+                                                    <i :class="getGenderIcon(child.gender)" class="me-2"></i>
+                                                    {{ child.firstName }} {{ child.lastName }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                
-                <!-- Простая статистика -->
-                <div class="mt-3">
-                    <p>Узлов: {{ treeData.nodes.length }}, Связей: {{ treeData.edges.length }}</p>
                 </div>
             </div>
         </div>
     `,
-
     data() {
         return {
-            allPersons: [],
-            selectedPersonId: null,
+            family: null,
             loading: false,
             error: null,
-            treeType: 'both',
-            treeData: {
-                nodes: [],
-                edges: []
+            persons: [],
+            showEditForm: false,
+            editFormData: {
+                id: null,
+                firstName: '',
+                lastName: '',
+                middleName: '',
+                gender: '',
+                birthDate: '',
+                deathDate: '',
+                biography: ''
             },
-            network: null,
-            treeVisible: false // Флаг видимости дерева
-        };
-    },
-
-    async created() {
-        console.log('🔵 FamilyTree компонент создан');
-        await this.loadAllPersons();
-    },
-
-    mounted() {
-        console.log('✅ FamilyTree компонент смонтирован');
-
-        // Если в URL есть ID, выбираем его
-        const personId = this.$route.params.personId;
-        if (personId) {
-            this.selectedPersonId = parseInt(personId);
-            // Используем setTimeout чтобы дать Vue отрендерить DOM
-            setTimeout(() => {
-                this.buildTree();
-            }, 100);
+            editFormPerson: {},
+            editFormMainPhoto: null,
+            editFormChildren: [],
+            editFormLoading: false,
+            editFormError: null,
+            editFormSuccess: null,
+            today: new Date().toISOString().split('T')[0]
         }
     },
-
+    async mounted() {
+        await this.loadPersons();
+        if (this.persons.length > 0) {
+            this.initFamilyTree();
+        }
+    },
+    beforeUnmount() {
+        if (this.family) {
+            this.family.destroy();
+        }
+    },
     methods: {
-        async loadAllPersons() {
-            try {
-                const response = await axios.get('http://localhost:8080/api/persons');
-                this.allPersons = response.data;
-                console.log('✅ Загружено персон:', this.allPersons.length);
-            } catch (error) {
-                console.error('❌ Ошибка загрузки персон:', error);
-                this.error = 'Не удалось загрузить список персон';
-            }
-        },
-
-        onPersonSelected() {
-            console.log('Выбрана персона ID:', this.selectedPersonId);
-            // Строим дерево если выбрана персона или режим "Полное"
-            if (this.selectedPersonId || this.treeType === 'both') {
-                this.buildTree();
-            }
-        },
-
-        setTreeType(type) {
-            this.treeType = type;
-            // Для режима "Полное" можно строить дерево без выбранной персоны
-            if (this.selectedPersonId || type === 'both') {
-                this.buildTree();
-            }
-        },
-
-        async buildTree() {
-            // Для режима "Полное" не требуется выбранная персона
-            if (!this.selectedPersonId && this.treeType !== 'both') {
-                console.log('❌ Нет выбранной персоны');
-                return;
-            }
-
-            console.log('🔄 Начинаем построение дерева...');
+        async loadPersons() {
             this.loading = true;
             this.error = null;
-            this.treeVisible = false; // Скрываем старое дерево
 
             try {
-                // Получаем данные дерева
-                const treePersons = await this.fetchTreeData();
-                console.log('✅ Получено персон:', treePersons.length);
-
-                // Создаем визуализацию
-                this.treeData = this.createVisData(treePersons);
-                console.log('✅ Создано узлов:', this.treeData.nodes.length);
-
-                // Проверяем ID узлов для отладки
-                const nodeIds = this.treeData.nodes.map(n => n.id);
-                const invalidIds = nodeIds.filter(id => !id || isNaN(parseInt(id)));
-                if (invalidIds.length > 0) {
-                    console.warn('⚠️ Найдены узлы с некорректными ID:', invalidIds);
-                }
-
-                // Показываем контейнер и рендерим дерево
-                this.treeVisible = true;
-
-                // Ждем обновления DOM
-                this.$nextTick(() => {
-                    setTimeout(() => {
-                        this.renderTree();
-                    }, 50);
-                });
-
-            } catch (error) {
-                console.error('❌ Ошибка построения дерева:', error);
-                this.error = 'Ошибка построения дерева: ' + error.message;
-                this.loading = false;
-            }
-        },
-
-        async fetchTreeData() {
-            console.log('🔄 Получение данных дерева...');
-
-            try {
-                // Получаем все персоны
                 const response = await axios.get('http://localhost:8080/api/persons');
-                const allPersons = response.data;
+                this.persons = response.data;
 
-                // Для режима "Полное" возвращаем все персоны
-                if (this.treeType === 'both') {
-                    console.log('✅ Режим "Полное": возвращаем все персоны');
-                    return allPersons;
-                }
-
-                // Для режимов "Предки" и "Потомки" требуется выбранная персона
-                if (!this.selectedPersonId) {
-                    throw new Error('Для этого режима требуется выбрать персону');
-                }
-
-                // Находим корневую персону
-                const rootPerson = allPersons.find(p => p.id === this.selectedPersonId);
-                if (!rootPerson) {
-                    throw new Error('Персона не найдена');
-                }
-
-                // Собираем дерево вокруг корня
-                const treePersons = [rootPerson];
-                const personMap = new Map();
-                allPersons.forEach(p => personMap.set(p.id, p));
-
-                // Функция для добавления родителей (рекурсивно)
-                const addParents = (person, depth, maxDepth) => {
-                    if (depth >= maxDepth) return;
-
-                    if (person.parent1 && person.parent1.id) {
-                        const parent = personMap.get(person.parent1.id);
-                        if (parent && !treePersons.find(p => p.id === parent.id)) {
-                            treePersons.push(parent);
-                            addParents(parent, depth + 1, maxDepth);
+                // Загружаем фото для каждой персоны
+                for (const person of this.persons) {
+                    try {
+                        const photoResp = await axios.get(`http://localhost:8080/api/photos/person/${person.id}/main`);
+                        const photo = photoResp.data;
+                        person.mainPhotoUrl = `http://localhost:8080/api/photos/file/${photo.fileName}`;
+                    } catch (err) {
+                        if (err.response && err.response.status !== 404) {
+                            console.warn('Ошибка при получении фото для персоны', person.id, err.message);
                         }
+                        person.mainPhotoUrl = null;
                     }
-
-                    if (person.parent2 && person.parent2.id) {
-                        const parent = personMap.get(person.parent2.id);
-                        if (parent && !treePersons.find(p => p.id === parent.id)) {
-                            treePersons.push(parent);
-                            addParents(parent, depth + 1, maxDepth);
-                        }
-                    }
-                };
-
-                // Функция для добавления детей (рекурсивно)
-                const addChildren = (person, depth, maxDepth) => {
-                    if (depth >= maxDepth) return;
-
-                    // Находим детей - всех, у кого текущая персона является родителем
-                    const children = allPersons.filter(p => {
-                        return (p.parent1 && p.parent1.id === person.id) ||
-                            (p.parent2 && p.parent2.id === person.id);
-                    });
-
-                    children.forEach(child => {
-                        if (!treePersons.find(p => p.id === child.id)) {
-                            treePersons.push(child);
-                            addChildren(child, depth + 1, maxDepth);
-                        }
-                    });
-                };
-
-                // Функция для добавления супругов
-                const addSpouses = (person) => {
-                    if (person.spouse && person.spouse.id) {
-                        const spouse = personMap.get(person.spouse.id);
-                        if (spouse && !treePersons.find(p => p.id === spouse.id)) {
-                            treePersons.push(spouse);
-                        }
-                    }
-                };
-
-                // В зависимости от типа дерева собираем данные
-                const maxDepth = 3; // Максимальная глубина
-
-                if (this.treeType === 'ancestors') {
-                    addParents(rootPerson, 0, maxDepth);
-                } else if (this.treeType === 'descendants') {
-                    addChildren(rootPerson, 0, maxDepth);
                 }
 
-                // Добавляем супругов для всех найденных персон
-                const personsToProcess = [...treePersons];
-                personsToProcess.forEach(person => {
-                    addSpouses(person);
-                });
-
-                return treePersons;
-
+                console.log('✅ Загружено персон:', this.persons.length);
             } catch (error) {
-                console.error('Ошибка получения данных:', error);
-                throw error;
-            }
-        },
-
-        // Упрощенная версия - только для демонстрации
-        calculateLevels(persons) {
-            const levels = {};
-            const personMap = new Map();
-            persons.forEach(p => {
-                if (p && p.id) {
-                    personMap.set(p.id, p);
-                }
-            });
-
-            // Начинаем с корневых персон (без родителей в дереве)
-            const rootPersons = persons.filter(p => {
-                const hasParent1InTree = p.parent1 && p.parent1.id && personMap.has(p.parent1.id);
-                const hasParent2InTree = p.parent2 && p.parent2.id && personMap.has(p.parent2.id);
-                return !hasParent1InTree && !hasParent2InTree;
-            });
-
-            // Присваиваем уровень 0 корневым персонам
-            rootPersons.forEach(person => {
-                if (person && person.id) {
-                    levels[person.id] = 0;
-                }
-            });
-
-            // Распределяем остальных: дети на уровень+1 от родителей
-            const assignLevels = (personId, currentLevel) => {
-                const person = personMap.get(personId);
-                if (!person) return;
-
-                // Находим детей
-                const children = persons.filter(p => {
-                    return (p.parent1 && p.parent1.id === personId) ||
-                        (p.parent2 && p.parent2.id === personId);
-                });
-
-                children.forEach(child => {
-                    if (child && child.id && levels[child.id] === undefined) {
-                        levels[child.id] = currentLevel + 1;
-                        // Добавляем супруга ребенка на тот же уровень
-                        if (child.spouse && child.spouse.id && personMap.has(child.spouse.id)) {
-                            levels[child.spouse.id] = currentLevel + 1;
-                        }
-                        assignLevels(child.id, currentLevel + 1);
-                    }
-                });
-            };
-
-            // Запускаем для всех корней
-            rootPersons.forEach(person => {
-                if (person && person.id) {
-                    assignLevels(person.id, 0);
-                    // Супруги корней тоже на уровне 0
-                    if (person.spouse && person.spouse.id && personMap.has(person.spouse.id)) {
-                        levels[person.spouse.id] = 0;
-                    }
-                }
-            });
-
-            // Убедимся, что у всех есть уровень
-            persons.forEach(person => {
-                if (person && person.id && levels[person.id] === undefined) {
-                    // Если уровень не назначен, пытаемся найти через родителей
-                    const parentIds = [];
-                    if (person.parent1 && person.parent1.id) parentIds.push(person.parent1.id);
-                    if (person.parent2 && person.parent2.id) parentIds.push(person.parent2.id);
-
-                    const parentLevels = parentIds.map(id => levels[id]).filter(l => l !== undefined);
-                    if (parentLevels.length > 0) {
-                        levels[person.id] = Math.max(...parentLevels) + 1;
-                    } else {
-                        // Если родители не в дереве или без уровня, назначаем 0
-                        levels[person.id] = 0;
-                    }
-                }
-            });
-
-            return levels;
-        },
-
-        createVisData(persons) {
-            const nodes = [];
-            const edges = new Map(); // ключ -> ребро, чтобы избегать дубликатов
-
-            // Сначала вычисляем уровни для всех персон на основе родительских связей
-            const levels = this.calculateLevels(persons);
-
-            persons.forEach(person => {
-                // Пропускаем персон без валидного ID
-                if (!person || !person.id || isNaN(parseInt(person.id))) {
-                    console.warn('⚠️ Пропущена персона без валидного ID:', person);
-                    return;
-                }
-
-                const isRoot = person.id === this.selectedPersonId;
-                const colors = this.getNodeColors(person, isRoot);
-
-                // Получаем уровень персоны
-                const level = levels[person.id] !== undefined ? levels[person.id] : 0;
-
-                const node = {
-                    id: person.id,
-                    label: this.buildNodeLabel(person),
-                    title: this.buildNodeTooltip(person),
-                    color: colors,
-                    shape: 'box',
-                    level: level, // Явно задаем уровень для иерархического layout
-                    font: {
-                        size: 15,
-                        face: 'Inter, Arial',
-                        multi: true,
-                        bold: {
-                            color: '#0f172a',
-                            size: 16,
-                            mod: 'bold'
-                        }
-                    },
-                    borderWidth: isRoot ? 3 : 2,
-                    margin: { top: 12, bottom: 12, left: 16, right: 16 },
-                    shadow: {
-                        enabled: true,
-                        color: 'rgba(15, 23, 42, 0.25)',
-                        size: 8,
-                        x: 0,
-                        y: 2
-                    },
-                    widthConstraint: { maximum: 180 }
-                };
-
-                nodes.push(node);
-
-                // Добавляем связи с родителями
-                if (person.parent1 && person.parent1.id) {
-                    const edgeKey = `${person.parent1.id}-${person.id}`;
-                    if (!edges.has(edgeKey)) {
-                        edges.set(edgeKey, {
-                            id: edgeKey,
-                            from: person.parent1.id,
-                            to: person.id,
-                            arrows: { to: { enabled: true, scaleFactor: 0.7 } },
-                            color: { color: '#38bdf8', highlight: '#0ea5e9' },
-                            width: 2.4,
-                            smooth: { enabled: true, roundness: 0.15 }
-                        });
-                    }
-                }
-
-                if (person.parent2 && person.parent2.id) {
-                    const edgeKey = `${person.parent2.id}-${person.id}`;
-                    if (!edges.has(edgeKey)) {
-                        edges.set(edgeKey, {
-                            id: edgeKey,
-                            from: person.parent2.id,
-                            to: person.id,
-                            arrows: { to: { enabled: true, scaleFactor: 0.7 } },
-                            color: { color: '#fb7185', highlight: '#f43f5e' },
-                            width: 2.4,
-                            smooth: { enabled: true, roundness: 0.15 }
-                        });
-                    }
-                }
-            });
-
-            // Добавляем супружеские связи (горизонтальные, без стрелок)
-            persons.forEach(person => {
-                if (!person || !person.id || isNaN(parseInt(person.id))) {
-                    return;
-                }
-
-                // Проверяем наличие супруга
-                if (person.spouse && person.spouse.id) {
-                    const spouseId = person.spouse.id;
-                    // Проверяем, что супруг тоже в дереве
-                    const spouseInTree = persons.find(p => p && p.id === spouseId);
-                    if (spouseInTree) {
-                        // Создаем уникальный ключ для супружеской связи (меньший ID -> больший ID)
-                        const spouseIds = [person.id, spouseId].sort((a, b) => a - b);
-                        const spouseEdgeKey = `spouse-${spouseIds[0]}-${spouseIds[1]}`;
-
-                        if (!edges.has(spouseEdgeKey)) {
-                            edges.set(spouseEdgeKey, {
-                                id: spouseEdgeKey,
-                                from: spouseIds[0],
-                                to: spouseIds[1],
-                                arrows: { to: { enabled: false } }, // Без стрелок для супружеских связей
-                                color: { color: '#9333ea', highlight: '#7c3aed' }, // Фиолетовый цвет для супружеских связей
-                                width: 2.5,
-                                dashes: [8, 4], // Пунктирная линия: 8px штрих, 4px пробел
-                                smooth: {
-                                    enabled: true,
-                                    type: 'horizontal', // Горизонтальная линия
-                                    roundness: 0
-                                }
-                            });
-                        }
-                    }
-                }
-            });
-
-            return {
-                nodes: nodes,
-                edges: Array.from(edges.values())
-            };
-        },
-
-        renderTree() {
-            console.log('🔄 Рендеринг дерева...');
-
-            // Проверяем доступность refs
-            if (!this.$refs.treeContainer) {
-                console.error('❌ Контейнер не найден в $refs!');
-                console.log('Доступные refs:', Object.keys(this.$refs));
-                console.log('treeVisible:', this.treeVisible);
-
-                // Пробуем найти контейнер в DOM
-                const container = document.querySelector('.family-tree-container [ref="treeContainer"]') ||
-                    document.querySelector('[ref="treeContainer"]');
-                console.log('Найден через querySelector:', container);
-
-                if (!container) {
-                    this.error = 'Контейнер для дерева не найден. Попробуйте обновить страницу.';
-                    this.loading = false;
-                    return;
-                }
-
-                // Сохраняем найденный контейнер в refs
-                this.$refs.treeContainer = container;
-            }
-
-            console.log('✅ Контейнер найден');
-
-            // Уничтожаем предыдущую сеть, если есть
-            if (this.network) {
-                console.log('Уничтожаем предыдущую сеть...');
-                this.network.destroy();
-                this.network = null;
-            }
-
-            try {
-                // Проверяем наличие данных
-                if (this.treeData.nodes.length === 0) {
-                    console.error('Нет данных для отображения');
-                    this.error = 'Нет данных для отображения дерева';
-                    this.loading = false;
-                    return;
-                }
-
-                console.log('✅ Данные для рендеринга:', {
-                    nodes: this.treeData.nodes.length,
-                    edges: this.treeData.edges.length
-                });
-
-                // Создаем DataSets для vis.js
-                const nodes = new vis.DataSet(this.treeData.nodes);
-                const edges = new vis.DataSet(this.treeData.edges);
-
-                // Настройки для визуализации
-                const options = {
-                    layout: {
-                        hierarchical: {
-                            enabled: true,
-                            direction: 'LR', // Слева направо: поколения как столбцы
-                            sortMethod: 'directed',
-                            nodeSpacing: 200, // Расстояние между узлами в одном уровне
-                            levelSeparation: 300, // Расстояние между столбцами (поколениями)
-                            treeSpacing: 150, // Расстояние между разными деревьями (если есть несколько корней)
-                            blockShifting: true,
-                            edgeMinimization: true,
-                            parentCentralization: false // Отключаем, чтобы супруги были рядом
-                        }
-                    },
-                    interaction: {
-                        hover: true,
-                        dragNodes: true,
-                        zoomView: true,
-                        dragView: true,
-                        hoverConnectedEdges: true,
-                        tooltipDelay: 150
-                    },
-                    physics: {
-                        enabled: false
-                    },
-                    nodes: {
-                        shape: 'box',
-                        font: {
-                            size: 15,
-                            face: 'Inter, Arial',
-                            multi: true
-                        },
-                        margin: 12
-                    },
-                    edges: {
-                        smooth: {
-                            enabled: true,
-                            type: 'cubicBezier',
-                            roundness: 0.3
-                        },
-                        arrows: {
-                            to: {
-                                enabled: true,
-                                scaleFactor: 0.8
-                            }
-                        },
-                        color: {
-                            color: '#94a3b8',
-                            highlight: '#64748b',
-                            inherit: 'from'
-                        },
-                        width: 2.5,
-                        dashes: false
-                    }
-                };
-
-
-                // Создаем визуализацию
-                console.log('Создаем сеть Vis.js...');
-                const container = this.$refs.treeContainer;
-                const data = { nodes, edges };
-
-                this.network = new vis.Network(container, data, options);
-                console.log('✅ Сеть Vis.js создана!');
-
-                // Добавляем обработчики событий
-                this.network.on('click', (params) => {
-                    if (params.nodes.length > 0) {
-                        const nodeId = params.nodes[0];
-                        console.log('Клик по узлу:', nodeId, 'тип:', typeof nodeId);
-
-                        // Проверяем валидность ID перед переходом
-                        if (nodeId !== undefined && nodeId !== null && !isNaN(parseInt(nodeId))) {
-                            const validId = parseInt(nodeId);
-                            console.log('✅ Переход к персоне с ID:', validId);
-                            this.$router.push(`/persons/${validId}`);
-                        } else {
-                            console.error('❌ Некорректный ID узла:', nodeId, 'тип:', typeof nodeId);
-                        }
-                    }
-                });
-
-                // Масштабируем чтобы все узлы были видны
-                setTimeout(() => {
-                    if (this.network) {
-                        this.network.fit({
-                            animation: {
-                                duration: 500,
-                                easingFunction: 'easeInOutQuad'
-                            }
-                        });
-                        console.log('✅ Дерево отмасштабировано');
-                    }
-                }, 200);
-
-                console.log('✅ Рендеринг завершен успешно');
-
-            } catch (error) {
-                console.error('❌ Ошибка создания сети:', error);
-                console.error('Детали ошибки:', error.message);
-                if (error.stack) console.error('Stack:', error.stack);
-                this.error = 'Ошибка создания визуализации: ' + error.message;
+                console.error('❌ Ошибка загрузки:', error);
+                this.error = 'Не удалось загрузить данные: ' + error.message;
             } finally {
                 this.loading = false;
             }
         },
 
-        buildNodeLabel(person) {
-            const lifeLine = this.getLifeLine(person);
-            const location = person.birthPlace || person.city || '';
-            const parts = [
-                `${person.firstName || ''} ${person.lastName || ''}`.trim(),
-                lifeLine,
-                location
-            ].filter(Boolean);
-
-            return parts.join('\n');
+        async refreshTree() {
+            await this.loadPersons();
+            if (this.family) {
+                this.family.destroy();
+            }
+            if (this.persons.length > 0) {
+                this.initFamilyTree();
+            }
         },
 
-        buildNodeTooltip(person) {
-            const lifeLine = this.getLifeLine(person);
-            const lines = [
-                `<strong>${person.firstName || ''} ${person.lastName || ''}</strong>`,
-                lifeLine ? `Жизнь: ${lifeLine}` : '',
-                person.birthPlace ? `Родился: ${person.birthPlace}` : '',
-                person.deathPlace ? `Умер: ${person.deathPlace}` : ''
-            ].filter(Boolean);
+        convertPersonToFamilyTreeFormat(person) {
+            // Формируем полное ФИО
+            const fullName = `${person.lastName || ''} ${person.firstName || ''} ${person.middleName || ''}`.trim() || 'Без имени';
 
-            return lines.join('<br>');
-        },
-
-        getNodeColors(person, isRoot) {
-            const palette = {
-                male: { bg: '#e0f2fe', border: '#0ea5e9' },
-                female: { bg: '#ffe4e6', border: '#f43f5e' },
-                unknown: { bg: '#f1f5f9', border: '#cbd5e1' },
-                root: { bg: '#fef9c3', border: '#f59e0b' }
-            };
-
-            let base;
-            if (isRoot) {
-                base = palette.root;
-            } else if (person.gender === 'MALE') {
-                base = palette.male;
-            } else if (person.gender === 'FEMALE') {
-                base = palette.female;
-            } else {
-                base = palette.unknown;
+            // Формируем годы жизни
+            const birthYear = person.birthDate ? new Date(person.birthDate).getFullYear() : '';
+            const deathYear = person.deathDate ? new Date(person.deathDate).getFullYear() : '';
+            let years = '';
+            if (birthYear && deathYear) {
+                years = `${birthYear} - ${deathYear}`;
+            } else if (birthYear) {
+                years = `род. ${birthYear}`;
+            } else if (deathYear) {
+                years = `ум. ${deathYear}`;
             }
 
-            return {
-                background: base.bg,
-                border: base.border,
-                highlight: {
-                    background: base.bg,
-                    border: base.border
-                },
-                hover: {
-                    background: base.bg,
-                    border: base.border
+            const node = {
+                id: person.id,
+                name: fullName,
+                relationship: this.getRelationship(person),
+                years: years,
+                bdate: birthYear,
+                ddate: deathYear,
+                img: person.mainPhotoUrl || this.getDefaultImage(person.gender),
+                gender: person.gender ? person.gender.toLowerCase() : 'unknown',
+                genderIcon: this.getGenderIconDataURI(person.gender)
+            };
+
+            // Обрабатываем родителей
+            // В FamilyTree.js: mid = мать (mother), fid = отец (father)
+            // Определяем по полу, кто мать, а кто отец
+            if (person.parent1 && person.parent1.id) {
+                if (person.parent1.gender === 'FEMALE') {
+                    node.mid = person.parent1.id;
+                } else {
+                    node.fid = person.parent1.id;
                 }
-            };
-        },
-
-        getLifeLine(person) {
-            const birth = this.formatYear(person.birthDate);
-            const death = this.formatYear(person.deathDate);
-
-            if (!birth && !death) return '';
-            if (birth && death) return `${birth} — ${death}`;
-            if (birth) return `${birth} — `;
-            return `— ${death}`;
-        },
-
-        formatYear(dateString) {
-            if (!dateString) return '';
-            try {
-                const date = new Date(dateString);
-                return date.getFullYear();
-            } catch (e) {
-                return '';
             }
-        }
-    },
+            if (person.parent2 && person.parent2.id) {
+                if (person.parent2.gender === 'FEMALE') {
+                    node.mid = person.parent2.id;
+                } else {
+                    node.fid = person.parent2.id;
+                }
+            }
 
-    beforeDestroy() {
-        // Уничтожаем сеть при удалении компонента
-        if (this.network) {
-            console.log('Уничтожаем сеть перед уничтожением компонента');
-            this.network.destroy();
+            // Обрабатываем супруга
+            if (person.spouse && person.spouse.id) {
+                if (!node.pids) {
+                    node.pids = [];
+                }
+                node.pids.push(person.spouse.id);
+            }
+
+            // Определяем теги для шаблонов
+            const tags = [];
+            if (person.gender === 'MALE') {
+                tags.push('male');
+            } else if (person.gender === 'FEMALE') {
+                tags.push('female');
+            }
+
+            // Если нет родителей, используем single шаблон
+            if (!person.parent1 && !person.parent2) {
+                if (person.gender === 'MALE') {
+                    tags.push('single_male');
+                } else if (person.gender === 'FEMALE') {
+                    tags.push('single_female');
+                }
+            }
+
+            if (tags.length > 0) {
+                node.tags = tags;
+            }
+
+            return node;
+        },
+
+        getRelationship(person) {
+            // Возвращаем пустую строку, так как будем использовать иконки
+            return '';
+        },
+
+        getGenderIconDataURI(gender) {
+            // Возвращаем data URI для SVG иконки пола
+            let svg = '';
+            if (gender === 'MALE' || gender === 'male') {
+                // Иконка мужского пола (синий круг с символом ♂)
+                svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#6bb4df"/><text x="12" y="16" font-size="14" fill="white" text-anchor="middle" font-weight="bold">♂</text></svg>';
+            } else if (gender === 'FEMALE' || gender === 'female') {
+                // Иконка женского пола (розовый круг с символом ♀)
+                svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#cb4aaf"/><text x="12" y="16" font-size="14" fill="white" text-anchor="middle" font-weight="bold">♀</text></svg>';
+            } else {
+                // По умолчанию серый круг
+                svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#aeaeae"/><text x="12" y="16" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>';
+            }
+            return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        },
+
+        getDefaultImage(gender) {
+            // Возвращаем SVG аватар
+            if (gender === 'MALE') {
+                // Простой мужской аватар (синий круг с иконкой)
+                const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="36" fill="#6bb4df"/><circle cx="36" cy="28" r="12" fill="#ffffff"/><path d="M 20 60 Q 20 45 36 45 Q 52 45 52 60 Z" fill="#ffffff"/></svg>';
+                return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+            } else if (gender === 'FEMALE') {
+                // Простой женский аватар (розовый круг с иконкой)
+                const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="36" fill="#cb4aaf"/><circle cx="36" cy="28" r="12" fill="#ffffff"/><path d="M 20 60 Q 20 45 36 45 Q 52 45 52 60 Z" fill="#ffffff"/></svg>';
+                return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+            }
+            // По умолчанию серый аватар
+            const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="36" fill="#aeaeae"/><circle cx="36" cy="28" r="12" fill="#ffffff"/><path d="M 20 60 Q 20 45 36 45 Q 52 45 52 60 Z" fill="#ffffff"/></svg>';
+            return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        },
+
+        createCustomEditForm() {
+            const self = this;
+
+            const editForm = function () { };
+
+            editForm.prototype.init = function (obj) {
+                // Инициализация формы
+                this.obj = obj;
+            };
+
+            editForm.prototype.show = function (node) {
+                // Открываем форму с данными узла
+                self.openEditForm(node);
+            };
+
+            editForm.prototype.hide = function (shouldUpdateTheNode) {
+                // Закрываем форму
+                if (shouldUpdateTheNode) {
+                    // Если нужно обновить узел, перезагружаем дерево
+                    self.refreshTree();
+                }
+                self.closeEditForm();
+            };
+
+            return new editForm();
+        },
+
+        getNodeId(node) {
+            // Определяем ID узла - может быть передан как объект с id, или просто число
+            if (typeof node === 'number') {
+                return node;
+            } else if (node && node.id) {
+                return node.id;
+            } else if (node && typeof node === 'object') {
+                // Пытаемся найти ID в объекте
+                return node.id || node.nodeId || node.pid;
+            }
+            return null;
+        },
+
+        openEditForm(node) {
+            console.log('Открытие формы редактирования для узла:', node);
+
+            const nodeId = this.getNodeId(node);
+            if (!nodeId) {
+                console.error('Не удалось определить ID узла:', node);
+                this.editFormError = 'Не удалось определить узел';
+                this.showEditForm = true;
+                return;
+            }
+
+            console.log('ID узла:', nodeId);
+
+            // Находим оригинальную персону по ID
+            const person = this.persons.find(p => p.id === nodeId);
+            if (!person) {
+                console.error('Персона не найдена для ID:', nodeId);
+                this.editFormError = 'Персона не найдена';
+                this.showEditForm = true; // Показываем форму даже с ошибкой
+                return;
+            }
+
+            console.log('Найдена персона:', person);
+
+            // Заполняем форму данными
+            // Форматируем даты для input type="date"
+            let birthDate = '';
+            let deathDate = '';
+            if (person.birthDate) {
+                birthDate = person.birthDate.includes('T')
+                    ? person.birthDate.split('T')[0]
+                    : person.birthDate;
+            }
+            if (person.deathDate) {
+                deathDate = person.deathDate.includes('T')
+                    ? person.deathDate.split('T')[0]
+                    : person.deathDate;
+            }
+
+            this.editFormData = {
+                id: person.id,
+                firstName: person.firstName || '',
+                lastName: person.lastName || '',
+                middleName: person.middleName || '',
+                gender: person.gender || '',
+                birthDate: birthDate,
+                deathDate: deathDate,
+                biography: person.biography || ''
+            };
+
+            this.editFormError = null;
+            this.editFormSuccess = null;
+            this.editFormPerson = person;
+            this.showEditForm = true;
+
+            // Загружаем фото и детей
+            this.loadEditFormPhoto(person.id);
+            this.loadEditFormChildren(person.id);
+        },
+
+        async loadEditFormPhoto(personId) {
+            try {
+                const response = await axios.get(`http://localhost:8080/api/photos/person/${personId}/main`);
+                const photo = response.data;
+                this.editFormMainPhoto = photo;
+            } catch (err) {
+                if (err.response && err.response.status === 404) {
+                    this.editFormMainPhoto = null;
+                } else {
+                    console.warn('Ошибка при загрузке фото:', err);
+                    this.editFormMainPhoto = null;
+                }
+            }
+        },
+
+        async loadEditFormChildren(personId) {
+            try {
+                const response = await axios.get(`http://localhost:8080/api/persons/${personId}/children`);
+                this.editFormChildren = response.data;
+            } catch (err) {
+                console.warn('Ошибка при загрузке детей:', err);
+                this.editFormChildren = [];
+            }
+        },
+
+        getPhotoUrl(fileName) {
+            return `http://localhost:8080/api/photos/file/${fileName}`;
+        },
+
+        formatDate(dateString) {
+            if (!dateString) return '';
+            return new Date(dateString).toLocaleDateString('ru-RU');
+        },
+
+        getGenderIcon(gender) {
+            if (gender === 'Мужской' || gender === 'MALE') {
+                return 'bi bi-gender-male text-primary';
+            } else if (gender === 'Женский' || gender === 'FEMALE') {
+                return 'bi bi-gender-female text-danger';
+            } else {
+                return 'bi bi-gender-ambiguous text-secondary';
+            }
+        },
+
+        getGenderDisplay(gender) {
+            if (gender === 'Мужской' || gender === 'MALE') {
+                return 'Мужской';
+            } else if (gender === 'Женский' || gender === 'FEMALE') {
+                return 'Женский';
+            } else {
+                return 'Не указан';
+            }
+        },
+
+        viewPersonInTree(personId) {
+            // Закрываем текущую форму
+            this.closeEditForm();
+            // Находим узел в дереве и открываем форму для него
+            setTimeout(() => {
+                const nodeData = this.persons.find(p => p.id === personId);
+                if (nodeData) {
+                    this.openEditForm(personId);
+                }
+            }, 300);
+        },
+
+        openPhotoLightbox(photo) {
+            // Простое открытие фото в новом окне или можно добавить лайтбокс
+            window.open(this.getPhotoUrl(photo.fileName), '_blank');
+        },
+
+        closeEditForm() {
+            this.showEditForm = false;
+            this.editFormError = null;
+            this.editFormSuccess = null;
+            this.editFormPerson = {};
+            this.editFormMainPhoto = null;
+            this.editFormChildren = [];
+        },
+
+        async saveEditForm() {
+            this.editFormLoading = true;
+            this.editFormError = null;
+            this.editFormSuccess = null;
+
+            try {
+                // Подготавливаем данные для API
+                const personData = {
+                    firstName: this.editFormData.firstName,
+                    lastName: this.editFormData.lastName,
+                    middleName: this.editFormData.middleName,
+                    gender: this.editFormData.gender,
+                    birthDate: this.editFormData.birthDate || null,
+                    deathDate: this.editFormData.deathDate || null
+                };
+
+                // Обновляем персону через API
+                await axios.put(
+                    `http://localhost:8080/api/persons/${this.editFormData.id}`,
+                    personData
+                );
+
+                this.editFormSuccess = 'Данные успешно обновлены!';
+
+                // Обновляем дерево через 1 секунду
+                setTimeout(() => {
+                    this.refreshTree();
+                    this.closeEditForm();
+                }, 1000);
+
+            } catch (error) {
+                console.error('❌ Ошибка обновления персоны:', error);
+                this.editFormError = 'Ошибка при сохранении: ' +
+                    (error.response?.data?.message || error.message);
+            } finally {
+                this.editFormLoading = false;
+            }
+        },
+
+        initFamilyTree() {
+            // Ждем, пока DOM будет готов
+            this.$nextTick(() => {
+                const treeElement = document.getElementById('tree');
+                if (!treeElement) {
+                    console.error('Элемент #tree не найден');
+                    return;
+                }
+
+                // Проверяем, что библиотека FamilyTree загружена
+                if (typeof FamilyTree === 'undefined') {
+                    console.error('Библиотека FamilyTree не загружена');
+                    this.error = 'Библиотека FamilyTree не загружена. Проверьте подключение скрипта.';
+                    return;
+                }
+
+                // Настраиваем шаблоны
+                this.setupTemplates();
+
+                // Преобразуем данные
+                const familyData = this.persons.map(p => this.convertPersonToFamilyTreeFormat(p));
+
+                // Создаем кастомную форму редактирования
+                const customEditForm = this.createCustomEditForm();
+
+                // Создаем экземпляр дерева
+                this.family = new FamilyTree(treeElement, {
+                    template: "main",
+                    scaleInitial: FamilyTree.match.boundary,
+                    mouseScrool: FamilyTree.action.zoom,
+                    nodeMenu: {
+                        details: { text: "Детали" },
+                        edit: { text: "Редактировать" }
+                    },
+                    nodeBinding: {
+                        field_0: "years",
+                        field_1: "name",
+                        field_2: "genderIcon",
+                        img_0: "img",
+                    },
+                    editUI: customEditForm,
+                    tags: {
+                        "single_male": {
+                            template: "single_male"
+                        },
+                        "single_female": {
+                            template: "single_female"
+                        },
+                        "main_female_child": {
+                            template: "main_female_child"
+                        },
+                        "main_male_child": {
+                            template: "main_male_child"
+                        },
+                        "family_single_female": {
+                            template: "family_single_female"
+                        },
+                        "family_single_male": {
+                            template: "family_single_male"
+                        }
+                    }
+                });
+
+                // Обработчик для отображения сердечка на связях
+                this.family.on('render-link', (sender, args) => {
+                    if (args.cnode.ppid != undefined) {
+                        args.html += '<use xlink:href="#heart" x="' + args.p.xa + '" y="' + args.p.ya + '"/>';
+                    }
+                });
+
+                // Обработчик клика на узел - используем событие 'node-click' библиотеки
+                this.family.on('node-click', (sender, args) => {
+                    console.log('Клик на узел:', args);
+                    if (args && args.node) {
+                        this.openEditForm(args.node);
+                    }
+                });
+
+                // Обработчик выбора пункта меню
+                this.family.on('node-menu-click', (sender, args) => {
+                    console.log('Клик в меню узла:', args);
+                    if (!args || !args.node) return;
+
+                    const nodeId = this.getNodeId(args.node);
+                    if (!nodeId) {
+                        console.error('Не удалось определить ID узла:', args.node);
+                        return;
+                    }
+
+                    if (args.menuItem === 'details') {
+                        // Переход на страницу просмотра персоны
+                        this.$router.push(`/persons/${nodeId}`);
+                    } else if (args.menuItem === 'edit') {
+                        // Открытие формы редактирования
+                        this.openEditForm(args.node);
+                    }
+                });
+
+                // Добавляем обработчик клика через DOM после загрузки дерева
+                this.family.on('ready', () => {
+                    console.log('Дерево готово, добавляем обработчики клика');
+                    const self = this;
+                    setTimeout(() => {
+                        const treeSvg = treeElement.querySelector('svg');
+                        if (treeSvg) {
+                            // Используем делегирование событий на весь SVG
+                            treeSvg.addEventListener('click', (e) => {
+                                // Ищем ближайший родительский элемент с data-id
+                                let target = e.target;
+                                let nodeId = null;
+
+                                // Поднимаемся по DOM дереву, ищем data-id
+                                while (target && target !== treeSvg) {
+                                    if (target.getAttribute && target.getAttribute('data-id')) {
+                                        nodeId = parseInt(target.getAttribute('data-id'));
+                                        break;
+                                    }
+                                    target = target.parentElement;
+                                }
+
+                                if (nodeId) {
+                                    console.log('Клик на узел с ID:', nodeId);
+                                    e.stopPropagation();
+                                    // Передаем ID напрямую, метод openEditForm сам найдет персону
+                                    self.openEditForm(nodeId);
+                                }
+                            });
+
+                            // Делаем все узлы кликабельными
+                            const allNodes = treeSvg.querySelectorAll('g');
+                            allNodes.forEach(node => {
+                                if (node.getAttribute && node.getAttribute('data-id')) {
+                                    node.style.cursor = 'pointer';
+                                }
+                            });
+                        }
+                    }, 1000);
+                });
+
+                // Загружаем данные
+                this.family.load(familyData);
+
+                console.log('✅ Семейное дерево инициализировано с', familyData.length, 'узлами');
+            });
+        },
+
+        setupTemplates() {
+            // Настройка базовых определений
+            FamilyTree.templates.base.defs =
+                `<g transform="matrix(0.05,0,0,0.05,-12,-9)" id="heart">
+                    <path fill="#aeaeae" d="M438.482,58.61c-24.7-26.549-59.311-41.655-95.573-41.711c-36.291,0.042-70.938,15.14-95.676,41.694l-8.431,8.909  l-8.431-8.909C181.284,5.762,98.663,2.728,45.832,51.815c-2.341,2.176-4.602,4.436-6.778,6.778 c-52.072,56.166-52.072,142.968,0,199.134l187.358,197.581c6.482,6.843,17.284,7.136,24.127,0.654 c0.224-0.212,0.442-0.43,0.654-0.654l187.29-197.581C490.551,201.567,490.551,114.77,438.482,58.61z"/>
+                </g>
+                <g transform="matrix(1,0,0,1,0,0)" id="dot"></g>
+                <g id="base_node_menu" style="cursor:pointer;">
+                    <rect x="0" y="0" fill="transparent" width="22" height="22"></rect>
+                    <circle cx="4" cy="11" r="2" fill="#b1b9be"></circle>
+                    <circle cx="11" cy="11" r="2" fill="#b1b9be"></circle>
+                    <circle cx="18" cy="11" r="2" fill="#b1b9be"></circle>
+                </g>
+                <g style="cursor: pointer;" id="base_tree_menu">
+                    <rect x="0" y="0" width="25" height="25" fill="transparent"></rect>
+                    ${FamilyTree.icon.addUser(25, 25, '#fff', 0, 0)}
+                </g>
+                <g style="cursor: pointer;" id="base_tree_menu_close">
+                    <circle cx="12.5" cy="12.5" r="12" fill="#F57C00"></circle>
+                    ${FamilyTree.icon.close(25, 25, '#fff', 0, 0)}
+                </g>            
+                <g id="base_up">
+                    <circle cx="115" cy="30" r="15" fill="#fff" stroke="#b1b9be" stroke-width="1"></circle>
+                    ${FamilyTree.icon.ft(20, 80, '#b1b9be', 105, -10)}
+                </g>
+                <clipPath id="base_img_0">
+                    <circle id="base_img_0_stroke" cx="45" cy="62" r="35"/>
+                </clipPath>
+                <clipPath id="base_img_1">
+                    <circle id="base_img_1_stroke" cx="100" cy="62" r="35"/>
+                </clipPath>`;
+
+            // Основной шаблон
+            FamilyTree.templates.main = Object.assign({}, FamilyTree.templates.base);
+            FamilyTree.templates.main.defs = `<style>
+                .{randId} .bft-edit-form-header, .{randId} .bft-img-button{
+                    background-color: #aeaeae;
+                }
+                .{randId}.male .bft-edit-form-header, .{randId}.male .bft-img-button{
+                    background-color: #6bb4df;
+                }        
+                .{randId}.male div.bft-img-button:hover{
+                    background-color: #cb4aaf;
+                }
+                .{randId}.female .bft-edit-form-header, .{randId}.female .bft-img-button{
+                    background-color: #cb4aaf;
+                }        
+                .{randId}.female div.bft-img-button:hover{
+                    background-color: #6bb4df;
+                }
+            </style>`;
+
+            FamilyTree.templates.main.node = '<rect x="0" y="0" height="{h}" width="{w}" fill="#ffffff" stroke-width="3" stroke="#ccc" rx="5" ry="5"></rect>' +
+                '<rect x="0" y="0" height="20" width="{w}" fill="#b1b9be" stroke-width="1" stroke="#b1b9be" rx="5" ry="5"></rect>' +
+                '<line x1="0" y1="20" x2="250" y2="20" stroke-width="5" stroke="#b1b9be"></line>';
+
+            FamilyTree.templates.main.field_0 =
+                '<text ' + FamilyTree.attr.width + ' ="250" style="font-size: 14px;" font-variant="all-small-caps" fill="white" x="125" y="16" text-anchor="middle">{val}</text>';
+            FamilyTree.templates.main.field_1 =
+                '<text ' + FamilyTree.attr.width + ' ="160" data-text-overflow="multiline" style="font-size: 14px;" fill="black" x="100" y="66" text-anchor="start">{val}</text>';
+            FamilyTree.templates.main.field_2 =
+                '<image xlink:href="{val}" x="100" y="85" width="24" height="24"/>';
+            FamilyTree.templates.main.img_0 =
+                `<use xlink:href="#base_img_0_stroke" /> 
+                <circle id="base_img_0_stroke" fill="#b1b9be" cx="45" cy="62" r="37"/>
+                <image preserveAspectRatio="xMidYMid slice" clip-path="url(#base_img_0)" xlink:href="{val}" x="10" y="26" width="72" height="72"></image>`;
+
+            // Мужской шаблон
+            FamilyTree.templates.main_male = Object.assign({}, FamilyTree.templates.main);
+            FamilyTree.templates.main_male.node = '<rect x="0" y="0" height="{h}" width="{w}" fill="#ffffff" stroke-width="3" stroke="#6bb4df" rx="5" ry="5"></rect>' +
+                '<rect x="0" y="0" height="20" width="{w}" fill="#6bb4df" stroke-width="1" stroke="#6bb4df" rx="5" ry="5"></rect>' +
+                '<line x1="0" y1="20" x2="250" y2="20" stroke-width="5" stroke="#6bb4df"></line>';
+            FamilyTree.templates.main_male.img_0 =
+                `<use xlink:href="#base_img_0_stroke" /> 
+                <circle id="base_img_0_stroke" fill="#6bb4df" cx="45" cy="62" r="37"/>
+                <image preserveAspectRatio="xMidYMid slice" clip-path="url(#base_img_0)" xlink:href="{val}" x="10" y="26" width="72" height="72"></image>`;
+            FamilyTree.templates.main_male_child = Object.assign({}, FamilyTree.templates.main_male);
+            FamilyTree.templates.main_male_child.link = '<path stroke-linejoin="round" stroke="#aeaeae" stroke-width="2px" fill="none" d="{rounded}" />';
+
+            // Женский шаблон
+            FamilyTree.templates.main_female = Object.assign({}, FamilyTree.templates.main_male);
+            FamilyTree.templates.main_female.node = '<rect x="0" y="0" height="{h}" width="{w}" fill="#ffffff" stroke-width="3" stroke="#cb4aaf" rx="5" ry="5"></rect>' +
+                '<rect x="0" y="0" height="20" width="{w}" fill="#cb4aaf" stroke-width="1" stroke="#cb4aaf" rx="5" ry="5"></rect>' +
+                '<line x1="0" y1="20" x2="250" y2="20" stroke-width="5" stroke="#cb4aaf"></line>';
+            FamilyTree.templates.main_female.img_0 =
+                `<use xlink:href="#base_img_0_stroke" /> 
+                <circle id="base_img_0_stroke" fill="#cb4aaf" cx="45" cy="62" r="37"/>
+                <image preserveAspectRatio="xMidYMid slice" clip-path="url(#base_img_0)" xlink:href="{val}" x="10" y="26" width="72" height="72"></image>`;
+            FamilyTree.templates.main_female_child = Object.assign({}, FamilyTree.templates.main_female);
+            FamilyTree.templates.main_female_child.link = '<path stroke-linejoin="round" stroke="#aeaeae" stroke-width="2px" fill="none" d="{rounded}" />';
+
+            // Одиночные шаблоны
+            FamilyTree.templates.single = Object.assign({}, FamilyTree.templates.tommy);
+            FamilyTree.templates.single.size = [200, 200];
+            FamilyTree.templates.single.defs = `<style>
+                .{randId} .bft-edit-form-header, .{randId} .bft-img-button{
+                    background-color: #aeaeae;
+                }
+                .{randId}.male .bft-edit-form-header, .{randId}.male .bft-img-button{
+                    background-color: #6bb4df;
+                }        
+                .{randId}.male div.bft-img-button:hover{
+                    background-color: #cb4aaf;
+                }
+                .{randId}.female .bft-edit-form-header, .{randId}.female .bft-img-button{
+                    background-color: #cb4aaf;
+                }        
+                .{randId}.female div.bft-img-button:hover{
+                    background-color: #6bb4df;
+                }
+            </style>`;
+            FamilyTree.templates.single.node =
+                '<circle cx="100" cy="100" r="100" fill="white" stroke-width="1" stroke="#aeaeae"></circle>';
+            FamilyTree.templates.single.field_0 = '<text ' + FamilyTree.attr.width + ' ="160" style="font-size: 14px;" font-variant="all-small-caps"  font-weight="bold" fill="black" x="100" y="115" text-anchor="middle">{val}</text>';
+            FamilyTree.templates.single.field_1 = '<text ' + FamilyTree.attr.width + ' ="190" data-text-overflow="multiline" style="font-size: 16px;" fill="black" x="100" y="135" text-anchor="middle">{val}</text>';
+            FamilyTree.templates.single.nodeMenuButton = `<use ${FamilyTree.attr.control_node_menu_id}="{id}" x="89" y="5" xlink:href="#base_node_menu" />`;
+
+            FamilyTree.templates.single_male = Object.assign({}, FamilyTree.templates.single);
+            FamilyTree.templates.single_male.node = '<circle cx="100" cy="100" r="100" fill="white" stroke-width="3" stroke="#6bb4df" ></circle>';
+            FamilyTree.templates.single_male.img_0 =
+                `<use xlink:href="#base_img_1_stroke"/> 
+                <circle id="base_img_1_stroke" fill="#6bb4df" cx="100" cy="62" r="37"/>
+                <image preserveAspectRatio="xMidYMid slice" clip-path="url(#base_img_1)" xlink:href="{val}" x="65" y="26" width="72" height="72"></image>`;
+
+            FamilyTree.templates.single_female = Object.assign({}, FamilyTree.templates.single_male);
+            FamilyTree.templates.single_female.node = '<circle cx="100" cy="100" r="100" fill="white" stroke-width="3" stroke="#cb4aaf" ></circle>';
+            FamilyTree.templates.single_female.img_0 =
+                `<use xlink:href="#base_img_1_stroke"/> 
+                <circle id="base_img_1_stroke" fill="#cb4aaf" cx="100" cy="62" r="37"/>
+                <image preserveAspectRatio="xMidYMid slice" clip-path="url(#base_img_1)" xlink:href="{val}" x="65" y="26" width="72" height="72"></image>`;
+
+            FamilyTree.templates.family_single_male = Object.assign({}, FamilyTree.templates.single_male);
+            FamilyTree.templates.family_single_male.link = '<path stroke-linejoin="round" stroke="#aeaeae" stroke-width="2px" fill="none" d="{rounded}" />';
+            FamilyTree.templates.family_single_female = Object.assign({}, FamilyTree.templates.single_female);
+            FamilyTree.templates.family_single_female.link = '<path stroke-linejoin="round" stroke="#aeaeae" stroke-width="2px" fill="none" d="{rounded}" />';
         }
     }
 };
+

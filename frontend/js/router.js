@@ -14,7 +14,8 @@ const routes = [
     { path: '/persons/new', component: PersonForm },
     { path: '/persons/:id/edit', component: PersonForm },
     { path: '/persons/:id', component: PersonView },
-    { path: '/tree', component: FamilyTree }
+    // Используем компонент без конфликта с глобальным конструктором FamilyTree
+    { path: '/tree', component: FamilyTreeComponent }
 ];
 
 const router = VueRouter.createRouter({
