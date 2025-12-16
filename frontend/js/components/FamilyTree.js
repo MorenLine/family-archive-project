@@ -811,14 +811,13 @@ const FamilyTreeComponent = {
         async loadEditFormPhoto(personId) {
             try {
                 const response = await axios.get(`http://localhost:8080/api/photos/person/${personId}/main`);
-                const photo = response.data;
-                this.editFormMainPhoto = photo;
-            } catch (err) {
-                if (err.response && err.response.status === 404) {
-                    this.editFormMainPhoto = null;
+                if (response.data) {
+                    this.editFormMainPhoto = response.data;
                 } else {
                     this.editFormMainPhoto = null;
                 }
+            } catch (err) {
+                this.editFormMainPhoto = null;
             }
         },
 
