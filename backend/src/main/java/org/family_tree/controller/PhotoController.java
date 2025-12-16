@@ -195,8 +195,10 @@ public class PhotoController {
             return ResponseEntity.notFound().build();
         }
         Optional<Photo> mainPhotoOpt = photoService.getMainPhoto(personId);
-        return mainPhotoOpt
-                .map(photo -> ResponseEntity.ok(photo))
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        if (mainPhotoOpt.isPresent()) {
+            return ResponseEntity.ok(mainPhotoOpt.get());
+        }
+        // Возвращаем 200 OK с пустым телом, если фото нет - это нормальная ситуация
+        return ResponseEntity.ok().build();
     }
 }
