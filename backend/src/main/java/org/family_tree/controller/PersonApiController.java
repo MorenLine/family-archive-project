@@ -1,39 +1,61 @@
 package org.family_tree.controller;
 
-import org.family_tree.model.Person;
-import org.family_tree.service.PersonService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
+import org.family_tree.model.Person;
+import org.family_tree.model.User;
+import org.family_tree.service.PersonService;
+import org.family_tree.service.UserService;
+import org.family_tree.util.SecurityUtil;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "http://localhost:5500")
+@CrossOrigin(origins = "*")
 public class PersonApiController {
 
     private final PersonService personService;
+    private final UserService userService;
 
     @Autowired
-    public PersonApiController(PersonService personService) {
+    public PersonApiController(PersonService personService, UserService userService) {
         this.personService = personService;
+        this.userService = userService;
     }
 
     @GetMapping("/persons")
-    public ResponseEntity<List<Person>> getAllPersons() {
-        List<Person> persons = personService.findAllWithRelations();
+    public ResponseEntity<List<Person>> getAllPersons(
+            @RequestParam(value = "userId", required = false) Long userId) {
+        User currentUser = SecurityUtil.getCurrentUserOrThrow();
+        User targetUser = resolveTargetUser(userId, currentUser);
+
+        List<Person> persons = personService.findAllWithRelationsByUser(targetUser);
         // Очищаем циклические ссылки
         persons.forEach(this::cleanCircularReferences);
         return ResponseEntity.ok(persons);
     }
 
     @GetMapping("/persons/{id}")
-    public ResponseEntity<Person> getPerson(@PathVariable Long id) {
-        Optional<Person> person = personService.findByIdWithParents(id);
+    public ResponseEntity<Person> getPerson(@PathVariable Long id,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        User currentUser = SecurityUtil.getCurrentUserOrThrow();
+        User targetUser = resolveTargetUser(userId, currentUser);
+
+        Optional<Person> person = personService.findByIdWithParentsAndUser(id, targetUser);
         return person.map(p -> {
             // Загружаем супруга если есть
             if (p.getSpouse() != null) {
@@ -45,14 +67,21 @@ public class PersonApiController {
     }
 
     @GetMapping("/persons/{id}/children")
-    public ResponseEntity<List<Person>> getChildren(@PathVariable Long id) {
-        List<Person> children = personService.findChildren(id);
+    public ResponseEntity<List<Person>> getChildren(@PathVariable Long id,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        User currentUser = SecurityUtil.getCurrentUserOrThrow();
+        User targetUser = resolveTargetUser(userId, currentUser);
+        List<Person> children = personService.findChildrenByUser(id, targetUser);
         children.forEach(this::cleanCircularReferences);
         return ResponseEntity.ok(children);
     }
 
     @PostMapping("/persons")
-    public ResponseEntity<Person> createPerson(@RequestBody Map<String, Object> personData) {
+    public ResponseEntity<Person> createPerson(@RequestBody Map<String, Object> personData,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        User currentUser = SecurityUtil.getCurrentUserOrThrow();
+        User targetUser = resolveTargetUser(userId, currentUser);
+        
         Person person = new Person();
         person.setFirstName((String) personData.get("firstName"));
         person.setLastName((String) personData.get("lastName"));
@@ -68,24 +97,24 @@ public class PersonApiController {
         }
         person.setBiography((String) personData.get("biography"));
         
-        // Обрабатываем родителей
+        // Обрабатываем родителей (только из текущего пользователя)
         if (personData.get("parent1") != null) {
             Map<String, Object> parent1Data = (Map<String, Object>) personData.get("parent1");
             Long parent1Id = ((Number) parent1Data.get("id")).longValue();
-            Optional<Person> parent1 = personService.findById(parent1Id);
+            Optional<Person> parent1 = personService.findByIdAndUser(parent1Id, targetUser);
             person.setParent1(parent1.orElse(null));
         }
         if (personData.get("parent2") != null) {
             Map<String, Object> parent2Data = (Map<String, Object>) personData.get("parent2");
             Long parent2Id = ((Number) parent2Data.get("id")).longValue();
-            Optional<Person> parent2 = personService.findById(parent2Id);
+            Optional<Person> parent2 = personService.findByIdAndUser(parent2Id, targetUser);
             person.setParent2(parent2.orElse(null));
         }
         
-        // Обрабатываем супруга при создании
+        // Обрабатываем супруга при создании (только из текущего пользователя)
         if (personData.get("spouseId") != null) {
             Long spouseId = ((Number) personData.get("spouseId")).longValue();
-            Optional<Person> spouse = personService.findById(spouseId);
+            Optional<Person> spouse = personService.findByIdAndUser(spouseId, targetUser);
             if (spouse.isPresent()) {
                 person.setSpouse(spouse.get());
                 // Устанавливаем обратную связь
@@ -94,14 +123,17 @@ public class PersonApiController {
             }
         }
         
-        Person savedPerson = personService.save(person);
+        Person savedPerson = personService.saveForUser(person, targetUser);
         cleanCircularReferences(savedPerson);
         return ResponseEntity.ok(savedPerson);
     }
 
     @PutMapping("/persons/{id}")
-    public ResponseEntity<Person> updatePerson(@PathVariable Long id, @RequestBody Map<String, Object> personData) {
-        Optional<Person> personOpt = personService.findByIdWithParents(id);
+    public ResponseEntity<Person> updatePerson(@PathVariable Long id, @RequestBody Map<String, Object> personData,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        User currentUser = SecurityUtil.getCurrentUserOrThrow();
+        User targetUser = resolveTargetUser(userId, currentUser);
+        Optional<Person> personOpt = personService.findByIdWithParentsAndUser(id, targetUser);
         if (personOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -127,11 +159,11 @@ public class PersonApiController {
         }
         person.setBiography((String) personData.get("biography"));
 
-        // Обновляем родителей через ID (избегаем циклических ссылок)
+        // Обновляем родителей через ID (избегаем циклических ссылок, только из текущего пользователя)
         if (personData.get("parent1") != null) {
             Map<String, Object> parent1Data = (Map<String, Object>) personData.get("parent1");
             Long parent1Id = ((Number) parent1Data.get("id")).longValue();
-            Optional<Person> parent1 = personService.findById(parent1Id);
+            Optional<Person> parent1 = personService.findByIdAndUser(parent1Id, targetUser);
             person.setParent1(parent1.orElse(null));
         } else {
             person.setParent1(null);
@@ -140,16 +172,16 @@ public class PersonApiController {
         if (personData.get("parent2") != null) {
             Map<String, Object> parent2Data = (Map<String, Object>) personData.get("parent2");
             Long parent2Id = ((Number) parent2Data.get("id")).longValue();
-            Optional<Person> parent2 = personService.findById(parent2Id);
+            Optional<Person> parent2 = personService.findByIdAndUser(parent2Id, targetUser);
             person.setParent2(parent2.orElse(null));
         } else {
             person.setParent2(null);
         }
 
-        // Обновляем супруга через ID
+        // Обновляем супруга через ID (только из текущего пользователя)
         if (personData.get("spouseId") != null) {
             Long spouseId = ((Number) personData.get("spouseId")).longValue();
-            Optional<Person> spouse = personService.findById(spouseId);
+            Optional<Person> spouse = personService.findByIdAndUser(spouseId, targetUser);
             if (spouse.isPresent()) {
                 // Если у текущего супруга был другой супруг, разводим их
                 if (person.getSpouse() != null && !person.getSpouse().getId().equals(spouseId)) {
@@ -178,8 +210,11 @@ public class PersonApiController {
     }
 
     @DeleteMapping("/persons/{id}")
-    public ResponseEntity<?> deletePerson(@PathVariable Long id) {
-        personService.deleteById(id);
+    public ResponseEntity<?> deletePerson(@PathVariable Long id,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        User currentUser = SecurityUtil.getCurrentUserOrThrow();
+        User targetUser = resolveTargetUser(userId, currentUser);
+        personService.deleteByIdAndUser(id, targetUser);
         return ResponseEntity.ok().build();
     }
 
@@ -233,8 +268,11 @@ public class PersonApiController {
 
     // Создаем DTO для передачи данных о родителях без рекурсии
     @GetMapping("/persons/{id}/parents")
-    public ResponseEntity<PersonParentsDTO> getParents(@PathVariable Long id) {
-        Optional<Person> personOpt = personService.findByIdWithParents(id);
+    public ResponseEntity<PersonParentsDTO> getParents(@PathVariable Long id,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        User currentUser = SecurityUtil.getCurrentUserOrThrow();
+        User targetUser = resolveTargetUser(userId, currentUser);
+        Optional<Person> personOpt = personService.findByIdWithParentsAndUser(id, targetUser);
         if (personOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -249,9 +287,12 @@ public class PersonApiController {
     }
 
     @PostMapping("/persons/{id}/marry/{spouseId}")
-    public ResponseEntity<Person> marryPersons(@PathVariable Long id, @PathVariable Long spouseId) {
-        Optional<Person> personOpt = personService.findById(id);
-        Optional<Person> spouseOpt = personService.findById(spouseId);
+    public ResponseEntity<Person> marryPersons(@PathVariable Long id, @PathVariable Long spouseId,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        User currentUser = SecurityUtil.getCurrentUserOrThrow();
+        User targetUser = resolveTargetUser(userId, currentUser);
+        Optional<Person> personOpt = personService.findByIdAndUser(id, targetUser);
+        Optional<Person> spouseOpt = personService.findByIdAndUser(spouseId, targetUser);
         
         if (personOpt.isEmpty() || spouseOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -272,8 +313,11 @@ public class PersonApiController {
     }
 
     @DeleteMapping("/persons/{id}/divorce")
-    public ResponseEntity<Person> divorcePerson(@PathVariable Long id) {
-        Optional<Person> personOpt = personService.findById(id);
+    public ResponseEntity<Person> divorcePerson(@PathVariable Long id,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        User currentUser = SecurityUtil.getCurrentUserOrThrow();
+        User targetUser = resolveTargetUser(userId, currentUser);
+        Optional<Person> personOpt = personService.findByIdAndUser(id, targetUser);
         
         if (personOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -329,5 +373,13 @@ public class PersonApiController {
         public void setParent2Id(Long parent2Id) {
             this.parent2Id = parent2Id;
         }
+    }
+
+    private User resolveTargetUser(Long requestedUserId, User currentUser) {
+        if (SecurityUtil.isAdmin() && requestedUserId != null) {
+            return userService.findById(requestedUserId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+        }
+        return currentUser;
     }
 }

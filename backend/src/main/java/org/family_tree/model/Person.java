@@ -72,6 +72,11 @@ public class Person {
     @OneToMany(mappedBy = "person", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Photo> photos = new ArrayList<>();
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnoreProperties({ "hibernateLazyInitializer", "handler", "password" })
+    private User user;
+
     public Person(Long id, String firstName, String lastName, String middleName, LocalDate birthDate,
             LocalDate deathDate, Gender gender, String biography, Person parent1_id, Person parent2_id,
             List<Person> childrenOfParent1, List<Person> childrenOfParent2) {

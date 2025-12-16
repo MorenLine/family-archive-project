@@ -1,0 +1,107 @@
+/* Стили для списка персон */
+.person-list-page {
+    min-height: 100vh;
+    background: #f8f9fa;
+}
+
+.hero-section-list {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 3rem 0;
+    margin-bottom: 2rem;
+}
+
+.hero-content-list h1 {
+    color: white;
+}
+
+.hero-content-list .lead {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.hero-stats {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.stat-badge-list {
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    padding: 0.5rem 1rem;
+    border-radius: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.stat-badge-list i {
+    font-size: 1.1rem;
+}
+
+.filters-section {
+    margin-bottom: 2rem;
+}
+
+.filters-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 1rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.persons-section {
+    padding-bottom: 3rem;
+}
+
+.person-card {
+    transition: all 0.3s ease;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 1rem;
+    overflow: hidden;
+}
+
+.person-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.person-card .card-body {
+    padding: 1.5rem;
+}
+
+.person-card .card-footer {
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+    padding: 1rem;
+}
+
+.person-card h5 {
+    color: #333;
+    font-weight: 600;
+}
+
+.person-card .card-text {
+    color: #6c757d;
+}
+
+@media (max-width: 768px) {
+    .hero-section-list {
+        padding: 2rem 0;
+    }
+
+    .hero-content-list h1 {
+        font-size: 2rem;
+    }
+
+    .stat-badge-list {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+}
+
+
+

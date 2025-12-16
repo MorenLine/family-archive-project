@@ -13,7 +13,6 @@ import org.family_tree.model.Photo;
 import org.family_tree.repository.PersonRepository;
 import org.family_tree.repository.PhotoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -28,10 +27,10 @@ public class PhotoService {
 
     private final String UPLOAD_DIR = "uploads/photos/";
 
-    public Photo savePhoto(MultipartFile file, Long personId, String description, LocalDate photoDate)
+    public Photo savePhoto(MultipartFile file, Person person, String description, LocalDate photoDate,
+            String customOriginalFileName)
             throws IOException {
-        Optional<Person> personOpt = personRepository.findById(personId);
-        if (personOpt.isEmpty()) {
+        if (person == null) {
             throw new RuntimeException("Персона не найдена");
         }
 
@@ -40,10 +39,14 @@ public class PhotoService {
             Files.createDirectories(uploadPath);
         }
 
-        String originalFileName = file.getOriginalFilename();
+        // Используем переданное название, если оно есть, иначе используем оригинальное имя файла
+        String originalFileName = (customOriginalFileName != null && !customOriginalFileName.trim().isEmpty()) 
+            ? customOriginalFileName.trim() 
+            : file.getOriginalFilename();
+        
         String fileExtension = "";
-        if (originalFileName != null && originalFileName.contains(".")) {
-            fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
+        if (file.getOriginalFilename() != null && file.getOriginalFilename().contains(".")) {
+            fileExtension = file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf("."));
         }
         String fileName = UUID.randomUUID().toString() + fileExtension;
 
@@ -55,7 +58,7 @@ public class PhotoService {
         photo.setOriginalFileName(originalFileName);
         photo.setDescription(description);
         photo.setPhotoDate(photoDate);
-        photo.setPerson(personOpt.get());
+        photo.setPerson(person);
 
         if (photoDate != null) {
             photo.setSortOrder(

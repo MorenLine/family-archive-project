@@ -1,23 +1,38 @@
 const PersonForm = {
     template: `
-        <div>
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1>
-                    <i class="bi" :class="isEditMode ? 'bi-person-check' : 'bi-person-plus'"></i> 
-                    {{ isEditMode ? 'Редактировать персону' : 'Новая персона' }}
-                </h1>
-                <router-link to="/persons" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left"></i> Назад к списку
-                </router-link>
+        <div class="person-form-page">
+            <!-- Hero Section -->
+            <div class="hero-section-person">
+                <div class="container">
+                    <div class="row align-items-center">
+                        <div class="col-lg-8">
+                            <div class="hero-content-person">
+                                <h1 class="display-4 fw-bold mb-3">
+                                    <i class="bi me-3" :class="isEditMode ? 'bi-person-check' : 'bi-person-plus'"></i>
+                                    {{ isEditMode ? 'Редактировать персону' : 'Новая персона' }}
+                                </h1>
+                                <p class="lead mb-0">Заполните информацию о члене семьи</p>
+                            </div>
+                        </div>
+                        <div class="col-lg-4 text-end">
+                            <div class="hero-actions">
+                                <router-link :to="routeWithUser('/persons')" class="btn btn-outline-light btn-lg" style="position: relative; z-index: 10; pointer-events: auto;">
+                                    <i class="bi bi-arrow-left me-2"></i>Назад к списку
+                                </router-link>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="row">
-                <!-- Основная форма -->
-                <div class="col-lg-8">
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">Основная информация</h5>
-                        </div>
+            <div class="container mt-4">
+                <div class="row">
+                    <!-- Основная форма -->
+                    <div class="col-lg-8">
+                        <div class="person-form-card card shadow-sm mb-4">
+                            <div class="card-header bg-white border-bottom">
+                                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Основная информация</h5>
+                            </div>
                         <div class="card-body">
                             <!-- Сообщения -->
                             <div v-if="successMessage" class="alert alert-success alert-dismissible fade show">
@@ -120,16 +135,47 @@ const PersonForm = {
                                     <label class="form-label fw-bold">Супруг(а)</label>
                                     <div class="row">
                                         <div class="col-md-8">
-                                            <select v-model.number="person.spouseId" class="form-select">
-                                                <option :value="null">-- Не выбрано --</option>
-                                                <option v-for="p in availableSpouses" 
-                                                        :key="p.id" 
-                                                        :value="p.id">
-                                                    {{ formatFullName(p) }}
-                                                    <span v-if="p.birthDate">({{ formatYear(p.birthDate) }})</span>
-                                                    <span v-if="p.spouse && p.spouse.id !== parseInt($route.params.id)" class="text-warning">* уже в браке</span>
-                                                </option>
-                                            </select>
+                                            <div class="parent-select" ref="spouseDropdown">
+                                                <div
+                                                    class="form-select d-flex justify-content-between align-items-center"
+                                                    role="button"
+                                                    @click="toggleSpouseDropdown"
+                                                >
+                                                    <span>
+                                                        {{ displaySpouseName(person.spouseId) || '-- Не выбрано --' }}
+                                                    </span>
+                                                </div>
+                                                <div v-if="spouseDropdownOpen" class="parent-dropdown">
+                                                    <div class="p-2 border-bottom bg-light">
+                                                        <input
+                                                            v-model="spouseSearch"
+                                                            type="text"
+                                                            class="form-control form-control-sm"
+                                                            placeholder="Поиск по имени, фамилии"
+                                                            @click.stop
+                                                        >
+                                                    </div>
+                                                    <div class="parent-options">
+                                                        <div
+                                                            class="parent-option"
+                                                            :class="{ 'active': person.spouseId === null }"
+                                                            @click="selectSpouse(null)"
+                                                        >
+                                                            -- Не выбрано --
+                                                        </div>
+                                                        <div
+                                                            v-for="p in filterSpousesByQuery(spouseSearch)"
+                                                            :key="p.id"
+                                                            class="parent-option"
+                                                            :class="{ 'active': person.spouseId === p.id }"
+                                                            @click="selectSpouse(p.id)"
+                                                        >
+                                                            <div class="fw-bold">{{ formatFullName(p) }}</div>
+                                                            <small class="text-muted" v-if="p.birthDate">({{ formatYear(p.birthDate) }})</small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                         <div class="col-md-4">
                                             <div class="d-flex gap-2">
@@ -157,29 +203,93 @@ const PersonForm = {
                                         <div class="col-md-6">
                                             <div class="mb-3">
                                                 <label class="form-label">Первый родитель</label>
-                                                <select v-model="person.parent1Id" class="form-select">
-                                                    <option value="">-- Не выбрано --</option>
-                                                    <option v-for="p in availableParents" 
-                                                            :key="p.id" 
-                                                            :value="p.id">
-                                                        {{ formatFullName(p) }}
-                                                        <span v-if="p.birthDate">({{ formatYear(p.birthDate) }})</span>
-                                                    </option>
-                                                </select>
+                                                <div class="parent-select" ref="parent1Dropdown">
+                                                    <div
+                                                        class="form-select d-flex justify-content-between align-items-center"
+                                                        role="button"
+                                                        @click="toggleParentDropdown('parent1')"
+                                                    >
+                                                        <span>
+                                                            {{ displayParentName(person.parent1Id) || '-- Не выбрано --' }}
+                                                        </span>
+                                                    </div>
+                                                    <div v-if="parentDropdownOpen.parent1" class="parent-dropdown">
+                                                        <div class="p-2 border-bottom bg-light">
+                                                            <input
+                                                                v-model="parentSearch.parent1"
+                                                                type="text"
+                                                                class="form-control form-control-sm"
+                                                                placeholder="Поиск по имени, фамилии"
+                                                                @click.stop
+                                                            >
+                                                        </div>
+                                                        <div class="parent-options">
+                                                            <div
+                                                                class="parent-option"
+                                                                :class="{ 'active': person.parent1Id === null }"
+                                                                @click="selectParent('parent1', null)"
+                                                            >
+                                                                -- Не выбрано --
+                                                            </div>
+                                                            <div
+                                                                v-for="p in filterParentsByQuery(parentSearch.parent1)"
+                                                                :key="p.id"
+                                                                class="parent-option"
+                                                                :class="{ 'active': person.parent1Id === p.id }"
+                                                                @click="selectParent('parent1', p.id)"
+                                                            >
+                                                                <div class="fw-bold">{{ formatFullName(p) }}</div>
+                                                                <small class="text-muted" v-if="p.birthDate">({{ formatYear(p.birthDate) }})</small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                         <div class="col-md-6">
                                             <div class="mb-3">
                                                 <label class="form-label">Второй родитель</label>
-                                                <select v-model="person.parent2Id" class="form-select">
-                                                    <option value="">-- Не выбрано --</option>
-                                                    <option v-for="p in availableParents" 
-                                                            :key="p.id" 
-                                                            :value="p.id">
-                                                        {{ formatFullName(p) }}
-                                                        <span v-if="p.birthDate">({{ formatYear(p.birthDate) }})</span>
-                                                    </option>
-                                                </select>
+                                                <div class="parent-select" ref="parent2Dropdown">
+                                                    <div
+                                                        class="form-select d-flex justify-content-between align-items-center"
+                                                        role="button"
+                                                        @click="toggleParentDropdown('parent2')"
+                                                    >
+                                                        <span>
+                                                            {{ displayParentName(person.parent2Id) || '-- Не выбрано --' }}
+                                                        </span>
+                                                    </div>
+                                                    <div v-if="parentDropdownOpen.parent2" class="parent-dropdown">
+                                                        <div class="p-2 border-bottom bg-light">
+                                                            <input
+                                                                v-model="parentSearch.parent2"
+                                                                type="text"
+                                                                class="form-control form-control-sm"
+                                                                placeholder="Поиск по имени, фамилии"
+                                                                @click.stop
+                                                            >
+                                                        </div>
+                                                        <div class="parent-options">
+                                                            <div
+                                                                class="parent-option"
+                                                                :class="{ 'active': person.parent2Id === null }"
+                                                                @click="selectParent('parent2', null)"
+                                                            >
+                                                                -- Не выбрано --
+                                                            </div>
+                                                            <div
+                                                                v-for="p in filterParentsByQuery(parentSearch.parent2)"
+                                                                :key="p.id"
+                                                                class="parent-option"
+                                                                :class="{ 'active': person.parent2Id === p.id }"
+                                                                @click="selectParent('parent2', p.id)"
+                                                            >
+                                                                <div class="fw-bold">{{ formatFullName(p) }}</div>
+                                                                <small class="text-muted" v-if="p.birthDate">({{ formatYear(p.birthDate) }})</small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -216,13 +326,13 @@ const PersonForm = {
                     </div>
                 </div>
 
-                <!-- Блок фотографий -->
-                <div class="col-lg-4">
-                    <!-- Загрузка фотографий -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">Фотографии</h5>
-                        </div>
+                    <!-- Блок фотографий -->
+                    <div class="col-lg-4">
+                        <!-- Загрузка фотографий -->
+                        <div class="person-photos-form-card card shadow-sm mb-4">
+                            <div class="card-header bg-white border-bottom">
+                                <h5 class="mb-0"><i class="bi bi-images me-2"></i>Фотографии</h5>
+                            </div>
                         <div class="card-body">
                             <!-- Форма загрузки фото -->
                             <div v-if="isEditMode" class="mb-3">
@@ -318,11 +428,11 @@ const PersonForm = {
                         </div>
                     </div>
 
-                    <!-- Подсказки -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-lightbulb"></i> Подсказки</h6>
-                        </div>
+                        <!-- Подсказки -->
+                        <div class="person-tips-card card shadow-sm">
+                            <div class="card-header bg-white border-bottom">
+                                <h6 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Подсказки</h6>
+                            </div>
                         <div class="card-body">
                             <ul class="small mb-0">
                                 <li>Поля помеченные * обязательны для заполнения</li>
@@ -394,6 +504,16 @@ const PersonForm = {
             },
             allPersons: [],
             photos: [],
+            parentSearch: {
+                parent1: '',
+                parent2: ''
+            },
+            parentDropdownOpen: {
+                parent1: false,
+                parent2: false
+            },
+            spouseSearch: '',
+            spouseDropdownOpen: false,
 
             // modal state for photo upload/edit
             showPhotoModal: false,
@@ -410,6 +530,9 @@ const PersonForm = {
         }
     },
     computed: {
+        targetUserId() {
+            return this.$route.query.userId ? Number(this.$route.query.userId) : null;
+        },
         isEditMode() {
             return this.$route.params.id !== undefined;
         },
@@ -421,25 +544,59 @@ const PersonForm = {
         availableSpouses() {
             const currentPersonId = this.isEditMode ? parseInt(this.$route.params.id) : null;
 
-            // Исключаем только текущую персону
-            // НЕ исключаем тех, у кого уже есть супруг (чтобы можно было видеть текущего супруга в списке)
             return this.allPersons.filter(p => {
                 if (!p || !p.id) return false;
-                // Исключаем только текущую персону
+                // Исключаем текущую персону
                 if (currentPersonId && p.id === currentPersonId) return false;
+
+                // Проверяем, в браке ли персона (прямая или обратная связь)
+                const hasSpouseDirect = p.spouse && p.spouse.id;
+                const hasSpouseReverse = this.allPersons.some(otherPerson =>
+                    otherPerson &&
+                    otherPerson.id !== p.id &&
+                    otherPerson.spouse &&
+                    otherPerson.spouse.id === p.id
+                );
+                const isInMarriage = hasSpouseDirect || hasSpouseReverse;
+
+                // Если персона в браке, исключаем её, кроме случая когда это текущий супруг редактируемой персоны
+                if (isInMarriage) {
+                    // Проверяем, является ли эта персона супругом текущей редактируемой персоны
+                    const isCurrentSpouse = currentPersonId && (
+                        (hasSpouseDirect && p.spouse.id === currentPersonId) ||
+                        (hasSpouseReverse && this.allPersons.find(otherPerson =>
+                            otherPerson &&
+                            otherPerson.id === currentPersonId &&
+                            otherPerson.spouse &&
+                            otherPerson.spouse.id === p.id
+                        ))
+                    );
+
+                    // Если это не текущий супруг, исключаем из списка
+                    if (!isCurrentSpouse) {
+                        return false;
+                    }
+                }
                 return true;
             });
         }
     },
+    watch: {
+        async '$route.query.userId'() {
+            await this.loadAllPersons();
+            if (this.isEditMode) {
+                await this.loadPerson();
+                await this.loadPhotos();
+            }
+        }
+    },
     async mounted() {
+        document.addEventListener('click', this.handleClickOutside);
         await this.loadAllPersons();
 
         if (this.isEditMode) {
             await this.loadPerson();
             await this.loadPhotos();
-
-            // Проверяем наличие супруга после загрузки
-            console.log('🔍 Проверка супруга после loadPerson. spouseId:', this.person.spouseId);
 
             // Если супруг не загрузился через основной запрос, пробуем найти его через список всех персон
             // Это нужно для случаев, когда связь была установлена автоматически (обратная связь)
@@ -451,26 +608,13 @@ const PersonForm = {
                     p.spouse && p.spouse.id === currentPersonId
                 );
                 if (personWithSpouse) {
-                    console.log('✅ Найден супруг через обратную связь:', personWithSpouse);
                     this.person.spouseId = parseInt(personWithSpouse.id);
-                    // Принудительно обновляем Vue
-                    this.$nextTick(() => {
-                        console.log('🔄 После установки через обратную связь spouseId:', this.person.spouseId);
-                    });
-                } else {
-                    console.log('⚠️ Супруг не найден ни через прямую, ни через обратную связь');
-                }
-            } else {
-                // Проверяем, что супруг есть в availableSpouses
-                const spouseInList = this.availableSpouses.find(p => p.id === this.person.spouseId);
-                if (!spouseInList) {
-                    console.warn('⚠️ Супруг с ID', this.person.spouseId, 'не найден в availableSpouses');
-                    console.log('📋 Доступные супруги:', this.availableSpouses.map(p => ({ id: p.id, name: `${p.firstName} ${p.lastName}` })));
-                } else {
-                    console.log('✅ Супруг найден в availableSpouses:', spouseInList);
                 }
             }
         }
+    },
+    beforeDestroy() {
+        document.removeEventListener('click', this.handleClickOutside);
     },
     methods: {
         clearSpouse() {
@@ -482,21 +626,18 @@ const PersonForm = {
 
         async loadAllPersons() {
             try {
-                const response = await axios.get('http://localhost:8080/api/persons');
+                const response = await axios.get(this.apiUrl('http://localhost:8080/api/persons'));
                 this.allPersons = response.data;
             } catch (error) {
-                console.error('Ошибка загрузки списка персон:', error);
+                // Игнорируем ошибки загрузки списка персон
             }
         },
 
         async loadPerson() {
             try {
                 this.loading = true;
-                const response = await axios.get(`http://localhost:8080/api/persons/${this.$route.params.id}`);
+                const response = await axios.get(this.apiUrl(`http://localhost:8080/api/persons/${this.$route.params.id}`));
                 const personData = response.data;
-
-                console.log('📥 Загружена персона:', personData);
-                console.log('👤 Супруг в данных:', personData.spouse);
 
                 // Заполняем форму данными
                 const spouseId = personData.spouse ? parseInt(personData.spouse.id) : null;
@@ -513,17 +654,7 @@ const PersonForm = {
                     parent2Id: personData.parent2 ? parseInt(personData.parent2.id) : null,
                     spouseId: spouseId
                 };
-
-                console.log('✅ Установлен spouseId:', this.person.spouseId, 'тип:', typeof this.person.spouseId);
-
-                // Принудительно обновляем Vue после установки данных
-                this.$nextTick(() => {
-                    console.log('🔄 После nextTick spouseId:', this.person.spouseId);
-                    console.log('📋 availableSpouses содержит супруга:',
-                        this.availableSpouses.some(p => p.id === spouseId));
-                });
             } catch (error) {
-                console.error('Ошибка загрузки персоны:', error);
                 this.errorMessage = 'Не удалось загрузить данные персоны';
             } finally {
                 this.loading = false;
@@ -535,7 +666,7 @@ const PersonForm = {
                 const response = await axios.get(`http://localhost:8080/api/photos/person/${this.$route.params.id}`);
                 this.photos = response.data;
             } catch (error) {
-                console.error('Ошибка загрузки фотографий:', error);
+                // Игнорируем ошибки загрузки фотографий
             }
         },
 
@@ -545,7 +676,6 @@ const PersonForm = {
                 this.successMessage = 'Главная фотография установлена!';
                 await this.loadPhotos(); // Обновляем список фотографий
             } catch (error) {
-                console.error('❌ Ошибка установки главной фото:', error);
                 this.errorMessage = 'Ошибка при установке главной фотографии: ' + error.message;
             }
         },
@@ -606,14 +736,14 @@ const PersonForm = {
                 if (this.isEditMode) {
                     // Редактирование существующей персоны
                     response = await axios.put(
-                        `http://localhost:8080/api/persons/${this.$route.params.id}`,
+                        this.apiUrl(`http://localhost:8080/api/persons/${this.$route.params.id}`),
                         personData
                     );
                     this.successMessage = 'Персона успешно обновлена!';
                 } else {
                     // Создание новой персоны
                     response = await axios.post(
-                        'http://localhost:8080/api/persons',
+                        this.apiUrl('http://localhost:8080/api/persons'),
                         personData
                     );
                     this.successMessage = 'Персона успешно создана!';
@@ -621,23 +751,20 @@ const PersonForm = {
                     // Если указан супруг при создании, регистрируем брак
                     if (this.person.spouseId) {
                         const newPersonId = response.data.id;
-                        await axios.post(`http://localhost:8080/api/persons/${newPersonId}/marry/${this.person.spouseId}`);
+                        await axios.post(this.apiUrl(`http://localhost:8080/api/persons/${newPersonId}/marry/${this.person.spouseId}`));
                         this.successMessage += ' Брак зарегистрирован!';
                     }
 
                     // Переходим к редактированию для загрузки фото
                     setTimeout(() => {
-                        this.$router.push(`/persons/${response.data.id}/edit`);
+                        this.$router.push(this.routeWithUser(`/persons/${response.data.id}/edit`));
                     }, 1500);
                 }
-
-                console.log('✅ Успех:', response.data);
 
                 // Обновляем список персон
                 await this.loadAllPersons();
 
             } catch (error) {
-                console.error('❌ Ошибка:', error);
                 this.errorMessage = 'Ошибка при сохранении: ' +
                     (error.response?.data?.message || error.message);
             } finally {
@@ -669,15 +796,14 @@ const PersonForm = {
             }
 
             try {
-                await axios.delete(`http://localhost:8080/api/persons/${this.$route.params.id}`);
+                await axios.delete(this.apiUrl(`http://localhost:8080/api/persons/${this.$route.params.id}`));
                 this.successMessage = 'Персона успешно удалена!';
 
                 // Через 2 секунды переходим к списку
                 setTimeout(() => {
-                    this.$router.push('/persons');
+                    this.$router.push(this.routeWithUser('/persons'));
                 }, 2000);
             } catch (error) {
-                console.error('❌ Ошибка удаления:', error);
                 this.errorMessage = 'Ошибка при удалении: ' + error.message;
             }
         },
@@ -719,6 +845,7 @@ const PersonForm = {
                 formData.append('personId', this.$route.params.id);
                 if (this.modalForm.description) formData.append('description', this.modalForm.description);
                 if (this.modalForm.photoDate) formData.append('photoDate', this.modalForm.photoDate);
+                if (this.modalForm.originalFileName) formData.append('originalFileName', this.modalForm.originalFileName);
 
                 await axios.post('http://localhost:8080/api/photos/upload', formData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
@@ -729,7 +856,6 @@ const PersonForm = {
                 this.cancelPhotoUpload();
                 await this.loadPhotos();
             } catch (error) {
-                console.error('❌ Ошибка загрузки фото:', error);
                 this.errorMessage = 'Ошибка при загрузке фотографии: ' + (error.response?.data || error.message);
             } finally {
                 this.uploadingPhoto = false;
@@ -749,7 +875,6 @@ const PersonForm = {
                 this.successMessage = 'Фотография удалена!';
                 await this.loadPhotos(); // Обновляем список фотографий
             } catch (error) {
-                console.error('❌ Ошибка удаления фото:', error);
                 this.errorMessage = 'Ошибка при удалении фотографии: ' + error.message;
             }
         },
@@ -798,7 +923,6 @@ const PersonForm = {
                     this.closePhotoModal();
                     await this.loadPhotos();
                 } catch (error) {
-                    console.error('❌ Ошибка обновления метаданных фото:', error);
                     this.errorMessage = 'Ошибка при обновлении данных фото: ' + (error.response?.data || error.message);
                 }
             }
@@ -818,6 +942,17 @@ const PersonForm = {
             return new Date(dateString).getFullYear();
         },
 
+        apiUrl(base) {
+            if (this.targetUserId) {
+                return `${base}${base.includes('?') ? '&' : '?'}userId=${this.targetUserId}`;
+            }
+            return base;
+        },
+
+        routeWithUser(path) {
+            return this.targetUserId ? { path, query: { userId: this.targetUserId } } : path;
+        },
+
         formatFullName(person) {
             if (!person) return '';
             const parts = [];
@@ -825,6 +960,77 @@ const PersonForm = {
             if (person.firstName) parts.push(person.firstName);
             if (person.middleName) parts.push(person.middleName);
             return parts.join(' ') || 'Без имени';
+        },
+
+        filterParentsByQuery(query) {
+            const normalized = (query || '').trim().toLowerCase();
+            const source = this.availableParents;
+            if (!normalized) return source;
+
+            return source.filter(p => {
+                const parts = [p.lastName, p.firstName, p.middleName]
+                    .filter(Boolean)
+                    .map(s => s.toLowerCase());
+                return parts.some(part => part.includes(normalized));
+            });
+        },
+
+        displayParentName(id) {
+            const person = this.availableParents.find(p => p.id === id);
+            return person ? this.formatFullName(person) : '';
+        },
+
+        toggleParentDropdown(key) {
+            this.parentDropdownOpen[key] = !this.parentDropdownOpen[key];
+        },
+
+        selectParent(key, id) {
+            if (key === 'parent1') {
+                this.person.parent1Id = id;
+            } else if (key === 'parent2') {
+                this.person.parent2Id = id;
+            }
+            this.parentDropdownOpen[key] = false;
+        },
+
+        handleClickOutside(event) {
+            const dropdown1 = this.$refs.parent1Dropdown;
+            const dropdown2 = this.$refs.parent2Dropdown;
+            const spouseDropdown = this.$refs.spouseDropdown;
+            const isInsideDropdown1 = dropdown1 && dropdown1.contains(event.target);
+            const isInsideDropdown2 = dropdown2 && dropdown2.contains(event.target);
+            const isInsideSpouse = spouseDropdown && spouseDropdown.contains(event.target);
+
+            if (!isInsideDropdown1) this.parentDropdownOpen.parent1 = false;
+            if (!isInsideDropdown2) this.parentDropdownOpen.parent2 = false;
+            if (!isInsideSpouse) this.spouseDropdownOpen = false;
+        },
+
+        filterSpousesByQuery(query) {
+            const normalized = (query || '').trim().toLowerCase();
+            const source = this.availableSpouses;
+            if (!normalized) return source;
+
+            return source.filter(p => {
+                const parts = [p.lastName, p.firstName, p.middleName]
+                    .filter(Boolean)
+                    .map(s => s.toLowerCase());
+                return parts.some(part => part.includes(normalized));
+            });
+        },
+
+        displaySpouseName(id) {
+            const person = this.availableSpouses.find(p => p.id === id);
+            return person ? this.formatFullName(person) : '';
+        },
+
+        toggleSpouseDropdown() {
+            this.spouseDropdownOpen = !this.spouseDropdownOpen;
+        },
+
+        selectSpouse(id) {
+            this.person.spouseId = id;
+            this.spouseDropdownOpen = false;
         }
     }
 };

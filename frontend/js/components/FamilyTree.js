@@ -1,57 +1,178 @@
 const FamilyTreeComponent = {
     template: `
-        <div>
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h1><i class="bi bi-diagram-3"></i> Семейное Древо</h1>
-                <button v-if="family" @click="refreshTree" class="btn btn-primary">
-                    <i class="bi bi-arrow-clockwise"></i> Обновить
-                </button>
-            </div>
-            
-            <div v-if="loading" class="text-center py-5">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Загрузка...</span>
+        <div class="family-tree-page">
+            <!-- Hero Section -->
+            <div class="hero-section-tree">
+                <div class="container">
+                    <div class="row align-items-center">
+                        <div class="col-lg-8">
+                            <div class="hero-content-tree">
+                                <h1 class="display-4 fw-bold mb-3">
+                                    <i class="bi bi-diagram-3 me-3"></i>Семейное Древо
+                                </h1>
+                                <p class="lead mb-4">Визуализируйте связи между членами вашей семьи</p>
+                                <div class="hero-stats-tree" v-if="persons.length > 0">
+                                    <div class="stat-badge-tree">
+                                        <i class="bi bi-people"></i>
+                                        <span>{{ treeStatistics.totalPersons }} персон</span>
+                                    </div>
+                                    <div class="stat-badge-tree">
+                                        <i class="bi bi-heart-fill"></i>
+                                        <span>{{ treeStatistics.couples }} пар</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4 text-end">
+                            <button v-if="family" @click="refreshTree" class="btn btn-light btn-lg px-4">
+                                <i class="bi bi-arrow-clockwise me-2"></i>Обновить
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <p class="mt-2">Загрузка семейного дерева...</p>
             </div>
-            
-            <div v-else-if="error" class="alert alert-danger">
-                <i class="bi bi-exclamation-triangle"></i> {{ error }}
+
+            <div class="container">
+                <div v-if="loading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                    <p class="mt-3">Загрузка семейного дерева...</p>
+                </div>
+                
+                <div v-else-if="error" class="alert alert-danger mt-4">
+                    <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
+                </div>
+                
+                <div v-else-if="persons.length === 0" class="empty-state mt-4">
+                    <div class="text-center py-5">
+                        <i class="bi bi-diagram-3 display-1 text-muted"></i>
+                        <h3 class="mt-3 mb-3">Нет данных для отображения</h3>
+                        <p class="text-muted mb-4">Добавьте персон, чтобы начать строить семейное дерево</p>
+                        <router-link to="/persons/new" class="btn btn-primary btn-lg">
+                            <i class="bi bi-person-plus me-2"></i>Добавить первую персону
+                        </router-link>
+                    </div>
+                </div>
+                
+                <div v-else>
+                    <!-- Дерево -->
+                    <div class="tree-section mb-4">
+                        <div id="tree" class="family-tree-container"></div>
+                    </div>
+                    
+                    <!-- Статистика -->
+                    <div class="statistics-card-tree">
+                        <div class="statistics-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-bar-chart me-2"></i>Статистика семейного дерева
+                            </h5>
+                        </div>
+                        <div class="statistics-body">
+                            <div class="row g-3">
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-card-tree">
+                                        <div class="stat-icon-tree">
+                                            <i class="bi bi-people"></i>
+                                        </div>
+                                        <div class="stat-number-tree">{{ treeStatistics.totalPersons }}</div>
+                                        <div class="stat-label-tree">Всего персон</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-card-tree">
+                                        <div class="stat-icon-tree">
+                                            <i class="bi bi-gender-male"></i>
+                                        </div>
+                                        <div class="stat-number-tree">{{ treeStatistics.males }}</div>
+                                        <div class="stat-label-tree">Мужчин</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-card-tree">
+                                        <div class="stat-icon-tree">
+                                            <i class="bi bi-gender-female"></i>
+                                        </div>
+                                        <div class="stat-number-tree">{{ treeStatistics.females }}</div>
+                                        <div class="stat-label-tree">Женщин</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-card-tree">
+                                        <div class="stat-icon-tree">
+                                            <i class="bi bi-heart-fill"></i>
+                                        </div>
+                                        <div class="stat-number-tree">{{ treeStatistics.couples }}</div>
+                                        <div class="stat-label-tree">Супружеских пар</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-card-tree">
+                                        <div class="stat-icon-tree">
+                                            <i class="bi bi-camera"></i>
+                                        </div>
+                                        <div class="stat-number-tree">{{ treeStatistics.withPhotos }}</div>
+                                        <div class="stat-label-tree">С фотографиями</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-card-tree">
+                                        <div class="stat-icon-tree">
+                                            <i class="bi bi-calendar"></i>
+                                        </div>
+                                        <div class="stat-number-tree">{{ treeStatistics.withBirthDate }}</div>
+                                        <div class="stat-label-tree">С датой рождения</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-card-tree">
+                                        <div class="stat-icon-tree">
+                                            <i class="bi bi-people-fill"></i>
+                                        </div>
+                                        <div class="stat-number-tree">{{ treeStatistics.withParents }}</div>
+                                        <div class="stat-label-tree">С родителями</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-card-tree">
+                                        <div class="stat-icon-tree">
+                                            <i class="bi bi-person-badge"></i>
+                                        </div>
+                                        <div class="stat-number-tree">{{ treeStatistics.withChildren }}</div>
+                                        <div class="stat-label-tree">С детьми</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            
-            <div v-else-if="persons.length === 0" class="text-center text-muted py-5">
-                <i class="bi bi-diagram-3 display-1"></i>
-                <p class="mt-3">Нет данных для отображения семейного дерева</p>
-                <router-link to="/persons/new" class="btn btn-primary">
-                    Добавить первую персону
-                </router-link>
-            </div>
-            
-            <div v-else id="tree" class="family-tree-container"></div>
             
             <!-- Кастомная форма редактирования -->
             <div v-if="showEditForm" class="custom-edit-form-overlay" @click.self="closeEditForm">
                 <div class="custom-edit-form-container">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
-                                <i class="bi" :class="editFormMode === 'edit' ? 'bi-pencil' : 'bi-eye'"></i> 
+                    <div class="card shadow-lg border-0">
+                        <div class="card-header custom-edit-form-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 text-white">
+                                <i class="bi me-2" :class="editFormMode === 'edit' ? 'bi-pencil' : 'bi-eye'"></i> 
                                 {{ editFormMode === 'edit' ? 'Редактировать персону' : 'Просмотр персоны' }}
                             </h5>
-                            <button type="button" class="btn-close" @click="closeEditForm"></button>
+                            <button type="button" class="btn-close btn-close-white" @click="closeEditForm"></button>
                         </div>
                         <div class="card-body">
-                            <div v-if="editFormError" class="alert alert-danger">
-                                <i class="bi bi-exclamation-triangle"></i> {{ editFormError }}
+                            <div v-if="editFormError" class="alert alert-danger alert-dismissible fade show">
+                                <i class="bi bi-exclamation-triangle me-2"></i>{{ editFormError }}
+                                <button type="button" class="btn-close" @click="editFormError = null"></button>
                             </div>
-                            <div v-if="editFormSuccess" class="alert alert-success">
-                                <i class="bi bi-check-circle"></i> {{ editFormSuccess }}
+                            <div v-if="editFormSuccess" class="alert alert-success alert-dismissible fade show">
+                                <i class="bi bi-check-circle me-2"></i>{{ editFormSuccess }}
+                                <button type="button" class="btn-close" @click="editFormSuccess = null"></button>
                             </div>
                             
                             <div class="row">
                                 <!-- Левая колонка: фото и основная информация -->
                                 <div class="col-lg-4">
-                                    <div class="card mb-3">
+                                    <div class="card shadow-sm mb-3 border-0">
                                         <div class="card-body">
                                             <!-- Основная фотография -->
                                             <div class="text-center mb-4">
@@ -70,33 +191,29 @@ const FamilyTreeComponent = {
 
                                             <!-- Базовая информация -->
                                             <div class="person-info">
-                                                <div class="d-flex align-items-center mb-3">
-                                                    <i :class="getGenderIcon(editFormData.gender)" class="me-2"></i>
-                                                    <span>{{ getGenderDisplay(editFormData.gender) }}</span>
+                                                <div class="d-flex align-items-center mb-3 p-2 bg-light rounded">
+                                                    <i :class="getGenderIcon(editFormData.gender)" class="me-2 fs-5"></i>
+                                                    <span class="fw-semibold">{{ getGenderDisplay(editFormData.gender) }}</span>
                                                 </div>
 
-                                                <div class="info-item mb-2">
-                                                    <strong>Имя:</strong>
-                                                    <p class="mb-0">{{ editFormData.firstName }}</p>
+                                                <div class="info-item mb-3">
+                                                    <strong class="text-muted d-block mb-1">
+                                                        <i class="bi bi-person me-1"></i>ФИО
+                                                    </strong>
+                                                    <p class="mb-0 fw-semibold">{{ formatFullName(editFormData) }}</p>
                                                 </div>
 
-                                                <div class="info-item mb-2">
-                                                    <strong>Фамилия:</strong>
-                                                    <p class="mb-0">{{ editFormData.lastName }}</p>
-                                                </div>
-
-                                                <div class="info-item mb-2" v-if="editFormData.middleName">
-                                                    <strong>Отчество:</strong>
-                                                    <p class="mb-0">{{ editFormData.middleName }}</p>
-                                                </div>
-
-                                                <div class="info-item mb-2" v-if="editFormData.birthDate">
-                                                    <strong>Дата рождения:</strong>
+                                                <div class="info-item mb-3" v-if="editFormData.birthDate">
+                                                    <strong class="text-muted d-block mb-1">
+                                                        <i class="bi bi-calendar me-1"></i>Дата рождения
+                                                    </strong>
                                                     <p class="mb-0">{{ formatDate(editFormData.birthDate) }}</p>
                                                 </div>
 
-                                                <div class="info-item mb-2" v-if="editFormData.deathDate">
-                                                    <strong>Дата смерти:</strong>
+                                                <div class="info-item mb-3" v-if="editFormData.deathDate">
+                                                    <strong class="text-muted d-block mb-1">
+                                                        <i class="bi bi-calendar-x me-1"></i>Дата смерти
+                                                    </strong>
                                                     <p class="mb-0">{{ formatDate(editFormData.deathDate) }}</p>
                                                 </div>
                                             </div>
@@ -108,148 +225,188 @@ const FamilyTreeComponent = {
                                 <div class="col-lg-8">
                                     <!-- Режим просмотра - только связи (родители, дети), без дублирования данных -->
                                     <div v-if="editFormMode === 'view'">
-                                        <!-- Кнопка закрытия -->
-                                        <div class="d-flex justify-content-end mb-3">
-                                            <button type="button" 
-                                                    class="btn btn-outline-secondary"
-                                                    @click="closeEditForm">
-                                                <i class="bi bi-x-lg"></i> Закрыть
-                                            </button>
+                                        <!-- Биография -->
+                                        <div class="card shadow-sm mb-3 border-0" v-if="editFormData.biography">
+                                            <div class="card-header bg-white border-bottom">
+                                                <h6 class="mb-0">
+                                                    <i class="bi bi-book me-2 text-primary"></i>Биография
+                                                </h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <p class="mb-0" style="text-align: justify; white-space: pre-wrap; color: #495057; line-height: 1.8;">{{ editFormData.biography }}</p>
+                                            </div>
                                         </div>
                                         
-                                        <!-- Биография -->
-                                        <div class="card mb-3" v-if="editFormData.biography">
-                                            <div class="card-body">
-                                                <h6><i class="bi bi-book"></i> Биография</h6>
-                                                <p class="mb-0" style="text-align: justify; white-space: pre-wrap;">{{ editFormData.biography }}</p>
-                                            </div>
+                                        <!-- Кнопка редактирования -->
+                                        <div class="d-flex justify-content-end mb-3">
+                                            <button type="button" 
+                                                    class="btn btn-primary"
+                                                    @click="switchToEditMode">
+                                                <i class="bi bi-pencil me-2"></i>Редактировать
+                                            </button>
                                         </div>
                                     </div>
                                     
                                     <!-- Режим редактирования -->
                                     <form v-else @submit.prevent="saveEditForm">
-                                        <div class="row">
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label class="form-label">Имя *</label>
-                                                    <input v-model="editFormData.firstName" 
-                                                           type="text" 
-                                                           class="form-control" 
-                                                           required>
+                                        <div class="card shadow-sm mb-3 border-0">
+                                            <div class="card-header bg-white border-bottom">
+                                                <h6 class="mb-0">
+                                                    <i class="bi bi-info-circle me-2 text-primary"></i>Основная информация
+                                                </h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="row">
+                                                    <div class="col-md-4">
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold">Имя *</label>
+                                                            <input v-model="editFormData.firstName" 
+                                                                   type="text" 
+                                                                   class="form-control" 
+                                                                   required>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold">Фамилия *</label>
+                                                            <input v-model="editFormData.lastName" 
+                                                                   type="text" 
+                                                                   class="form-control"
+                                                                   required>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold">Отчество</label>
+                                                            <input v-model="editFormData.middleName" 
+                                                                   type="text" 
+                                                                   class="form-control">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="row">
+                                                    <div class="col-md-4">
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold">Пол *</label>
+                                                            <select v-model="editFormData.gender" 
+                                                                    class="form-select"
+                                                                    required>
+                                                                <option value="">-- Выберите пол --</option>
+                                                                <option value="MALE">Мужской</option>
+                                                                <option value="FEMALE">Женский</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold">Дата рождения</label>
+                                                            <input v-model="editFormData.birthDate" 
+                                                                   type="date" 
+                                                                   class="form-control"
+                                                                   :max="today">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold">Дата смерти</label>
+                                                            <input v-model="editFormData.deathDate" 
+                                                                   type="date" 
+                                                                   class="form-control"
+                                                                   :min="editFormData.birthDate"
+                                                                   :max="today">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="mb-0">
+                                                    <label class="form-label fw-semibold">Биография</label>
+                                                    <textarea v-model="editFormData.biography" 
+                                                              class="form-control" 
+                                                              rows="4"
+                                                              placeholder="Расскажите о жизни человека..."></textarea>
                                                 </div>
                                             </div>
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label class="form-label">Фамилия *</label>
-                                                    <input v-model="editFormData.lastName" 
-                                                           type="text" 
-                                                           class="form-control"
-                                                           required>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label class="form-label">Отчество</label>
-                                                    <input v-model="editFormData.middleName" 
-                                                           type="text" 
-                                                           class="form-control">
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="row">
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label class="form-label">Пол *</label>
-                                                    <select v-model="editFormData.gender" 
-                                                            class="form-select"
-                                                            required>
-                                                        <option value="">-- Выберите пол --</option>
-                                                        <option value="MALE">Мужской</option>
-                                                        <option value="FEMALE">Женский</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label class="form-label">Дата рождения</label>
-                                                    <input v-model="editFormData.birthDate" 
-                                                           type="date" 
-                                                           class="form-control"
-                                                           :max="today">
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label class="form-label">Дата смерти</label>
-                                                    <input v-model="editFormData.deathDate" 
-                                                           type="date" 
-                                                           class="form-control"
-                                                           :min="editFormData.birthDate"
-                                                           :max="today">
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="mb-3">
-                                            <label class="form-label">Биография</label>
-                                            <textarea v-model="editFormData.biography" 
-                                                      class="form-control" 
-                                                      rows="4"
-                                                      placeholder="Расскажите о жизни человека..."></textarea>
                                         </div>
                                         
                                         <div class="d-flex gap-2 justify-content-end mb-4">
                                             <button type="button" 
                                                     class="btn btn-outline-secondary"
                                                     @click="switchToViewMode">
-                                                Отмена
+                                                <i class="bi bi-x-lg me-1"></i>Отмена
                                             </button>
                                             <button type="submit" 
                                                     class="btn btn-primary"
                                                     :disabled="editFormLoading">
                                                 <span v-if="editFormLoading" class="spinner-border spinner-border-sm me-2"></span>
-                                                <i v-else class="bi bi-check-lg"></i>
+                                                <i v-else class="bi bi-check-lg me-1"></i>
                                                 Сохранить
                                             </button>
                                         </div>
                                     </form>
 
-                                    <!-- Родители -->
-                                    <div class="card mb-3" v-if="editFormPerson.parent1 || editFormPerson.parent2">
+                                    <!-- Супруг(а) -->
+                                    <div class="card shadow-sm mb-3 border-0" v-if="editFormPerson.spouse">
+                                        <div class="card-header bg-white border-bottom">
+                                            <h6 class="mb-0">
+                                                <i class="bi bi-heart me-2 text-danger"></i>Супруг(а)
+                                            </h6>
+                                        </div>
                                         <div class="card-body">
-                                            <h6><i class="bi bi-people"></i> Родители</h6>
-                                            <div class="list-group">
+                                            <div class="list-group list-group-flush">
+                                                <div class="list-group-item list-group-item-action border-0 px-0"
+                                                     style="cursor: pointer;"
+                                                     @click="viewPersonInTree(editFormPerson.spouse.id)">
+                                                    <i :class="getGenderIcon(editFormPerson.spouse.gender)" class="me-2"></i>
+                                                    <span class="fw-semibold">{{ formatFullName(editFormPerson.spouse) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Родители -->
+                                    <div class="card shadow-sm mb-3 border-0" v-if="editFormPerson.parent1 || editFormPerson.parent2">
+                                        <div class="card-header bg-white border-bottom">
+                                            <h6 class="mb-0">
+                                                <i class="bi bi-people me-2 text-primary"></i>Родители
+                                            </h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="list-group list-group-flush">
                                                 <div v-if="editFormPerson.parent1" 
-                                                     class="list-group-item list-group-item-action"
+                                                     class="list-group-item list-group-item-action border-0 px-0"
                                                      style="cursor: pointer;"
                                                      @click="viewPersonInTree(editFormPerson.parent1.id)">
                                                     <i class="bi bi-gender-male text-primary me-2"></i>
-                                                    {{ editFormPerson.parent1.firstName }} {{ editFormPerson.parent1.lastName }}
+                                                    <span class="fw-semibold">{{ formatFullName(editFormPerson.parent1) }}</span>
                                                 </div>
                                                 <div v-if="editFormPerson.parent2" 
-                                                     class="list-group-item list-group-item-action"
+                                                     class="list-group-item list-group-item-action border-0 px-0"
                                                      style="cursor: pointer;"
                                                      @click="viewPersonInTree(editFormPerson.parent2.id)">
                                                     <i class="bi bi-gender-female text-danger me-2"></i>
-                                                    {{ editFormPerson.parent2.firstName }} {{ editFormPerson.parent2.lastName }}
+                                                    <span class="fw-semibold">{{ formatFullName(editFormPerson.parent2) }}</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
                                     <!-- Дети -->
-                                    <div class="card mb-3" v-if="editFormChildren.length > 0">
+                                    <div class="card shadow-sm mb-3 border-0" v-if="editFormChildren.length > 0">
+                                        <div class="card-header bg-white border-bottom">
+                                            <h6 class="mb-0">
+                                                <i class="bi bi-people-fill me-2 text-success"></i>Дети
+                                            </h6>
+                                        </div>
                                         <div class="card-body">
-                                            <h6><i class="bi bi-people"></i> Дети</h6>
-                                            <div class="list-group">
+                                            <div class="list-group list-group-flush">
                                                 <div v-for="child in editFormChildren" 
                                                      :key="child.id"
-                                                     class="list-group-item list-group-item-action"
+                                                     class="list-group-item list-group-item-action border-0 px-0"
                                                      style="cursor: pointer;"
                                                      @click="viewPersonInTree(child.id)">
                                                     <i :class="getGenderIcon(child.gender)" class="me-2"></i>
-                                                    {{ child.firstName }} {{ child.lastName }}
+                                                    <span class="fw-semibold">{{ formatFullName(child) }}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -290,6 +447,73 @@ const FamilyTreeComponent = {
             today: new Date().toISOString().split('T')[0]
         }
     },
+    computed: {
+        targetUserId() {
+            return this.$route.query.userId ? Number(this.$route.query.userId) : null;
+        },
+        treeStatistics() {
+            const stats = {
+                totalPersons: this.persons.length,
+                males: 0,
+                females: 0,
+                couples: 0,
+                withPhotos: 0,
+                withBirthDate: 0,
+                withParents: 0,
+                withChildren: 0
+            };
+
+            const processedCouples = new Set();
+
+            this.persons.forEach(person => {
+                // Подсчет по полу
+                if (person.gender === 'MALE') {
+                    stats.males++;
+                } else if (person.gender === 'FEMALE') {
+                    stats.females++;
+                }
+
+                // Подсчет с фото
+                if (person.mainPhotoUrl) {
+                    stats.withPhotos++;
+                }
+
+                // Подсчет с датой рождения
+                if (person.birthDate) {
+                    stats.withBirthDate++;
+                }
+
+                // Подсчет с родителями
+                if (person.parent1 || person.parent2) {
+                    stats.withParents++;
+                }
+
+                // Подсчет супружеских пар (каждую пару считаем один раз)
+                if (person.spouse && person.spouse.id) {
+                    const coupleId = person.id < person.spouse.id
+                        ? `${person.id}-${person.spouse.id}`
+                        : `${person.spouse.id}-${person.id}`;
+                    if (!processedCouples.has(coupleId)) {
+                        stats.couples++;
+                        processedCouples.add(coupleId);
+                    }
+                }
+            });
+
+            // Подсчет персон с детьми
+            this.persons.forEach(person => {
+                const hasChildren = this.persons.some(p =>
+                    (p.parent1 && p.parent1.id === person.id) ||
+                    (p.parent2 && p.parent2.id === person.id)
+                );
+                if (hasChildren) {
+                    stats.withChildren++;
+                }
+            });
+
+            return stats;
+        }
+    },
     async mounted() {
         await this.loadPersons();
         if (this.persons.length > 0) {
@@ -301,36 +525,53 @@ const FamilyTreeComponent = {
             this.family.destroy();
         }
     },
+    watch: {
+        async '$route.query.userId'() {
+            await this.refreshTree();
+        }
+    },
     methods: {
         async loadPersons() {
             this.loading = true;
             this.error = null;
 
             try {
-                const response = await axios.get('http://localhost:8080/api/persons');
+                const response = await axios.get(this.apiUrl('http://localhost:8080/api/persons'));
                 this.persons = response.data;
 
                 // Загружаем фото для каждой персоны
                 for (const person of this.persons) {
                     try {
-                        const photoResp = await axios.get(`http://localhost:8080/api/photos/person/${person.id}/main`);
-                        const photo = photoResp.data;
-                        person.mainPhotoUrl = `http://localhost:8080/api/photos/file/${photo.fileName}`;
-                    } catch (err) {
-                        if (err.response && err.response.status !== 404) {
-                            console.warn('Ошибка при получении фото для персоны', person.id, err.message);
+                        const photoResp = await axios.get(`http://localhost:8080/api/photos/person/${person.id}/main`, {
+                            validateStatus: function (status) {
+                                // Не считаем 404 ошибкой - это нормально, если у персоны нет главного фото
+                                return status < 500;
+                            }
+                        });
+                        if (photoResp.status === 200 && photoResp.data) {
+                            const photo = photoResp.data;
+                            person.mainPhotoUrl = `http://localhost:8080/api/photos/file/${photo.fileName}`;
+                        } else {
+                            person.mainPhotoUrl = null;
                         }
+                    } catch (err) {
+                        // Игнорируем ошибки загрузки фото - это не критично
                         person.mainPhotoUrl = null;
                     }
                 }
 
-                console.log('✅ Загружено персон:', this.persons.length);
             } catch (error) {
-                console.error('❌ Ошибка загрузки:', error);
                 this.error = 'Не удалось загрузить данные: ' + error.message;
             } finally {
                 this.loading = false;
             }
+        },
+
+        apiUrl(base) {
+            if (this.targetUserId) {
+                return `${base}${base.includes('?') ? '&' : '?'}userId=${this.targetUserId}`;
+            }
+            return base;
         },
 
         async refreshTree() {
@@ -481,7 +722,6 @@ const FamilyTreeComponent = {
 
                 // Проверяем флаг - если установлен, значит был клик на "Детали"
                 if (self.preventEditFormOpen && nodeId) {
-                    console.log('✅ Пропускаем открытие формы, выполняется переадресация для ID:', nodeId);
                     // Переадресация уже выполнена в onClick, просто не открываем форму
                     return;
                 }
@@ -503,8 +743,6 @@ const FamilyTreeComponent = {
         },
 
         async openEditForm(node, mode = 'view') {
-            console.log('Открытие формы для узла:', node, 'режим:', mode);
-
             // Определяем ID узла - может быть передан как объект с id, или просто число
             let nodeId = null;
             if (typeof node === 'number') {
@@ -517,23 +755,18 @@ const FamilyTreeComponent = {
             }
 
             if (!nodeId) {
-                console.error('Не удалось определить ID узла:', node);
                 this.editFormError = 'Не удалось определить узел';
                 this.showEditForm = true;
                 return;
             }
-
-            console.log('ID узла:', nodeId);
 
             // Устанавливаем режим
             this.editFormMode = mode;
 
             try {
                 // Загружаем полную информацию о персоне с сервера, чтобы получить актуальные данные о родителях и супруге
-                const response = await axios.get(`http://localhost:8080/api/persons/${nodeId}`);
+                const response = await axios.get(this.apiUrl(`http://localhost:8080/api/persons/${nodeId}`));
                 const person = response.data;
-
-                console.log('Загружена персона с сервера:', person);
 
                 // Заполняем форму данными
                 // Форматируем даты для input type="date"
@@ -570,7 +803,6 @@ const FamilyTreeComponent = {
                 this.loadEditFormPhoto(person.id);
                 this.loadEditFormChildren(person.id);
             } catch (error) {
-                console.error('Ошибка загрузки персоны:', error);
                 this.editFormError = 'Ошибка загрузки данных персоны: ' + (error.response?.data?.message || error.message);
                 this.showEditForm = true;
             }
@@ -585,7 +817,6 @@ const FamilyTreeComponent = {
                 if (err.response && err.response.status === 404) {
                     this.editFormMainPhoto = null;
                 } else {
-                    console.warn('Ошибка при загрузке фото:', err);
                     this.editFormMainPhoto = null;
                 }
             }
@@ -593,16 +824,24 @@ const FamilyTreeComponent = {
 
         async loadEditFormChildren(personId) {
             try {
-                const response = await axios.get(`http://localhost:8080/api/persons/${personId}/children`);
+                const response = await axios.get(this.apiUrl(`http://localhost:8080/api/persons/${personId}/children`));
                 this.editFormChildren = response.data;
             } catch (err) {
-                console.warn('Ошибка при загрузке детей:', err);
                 this.editFormChildren = [];
             }
         },
 
         getPhotoUrl(fileName) {
             return `http://localhost:8080/api/photos/file/${fileName}`;
+        },
+
+        formatFullName(person) {
+            if (!person) return '';
+            const parts = [];
+            if (person.lastName) parts.push(person.lastName);
+            if (person.firstName) parts.push(person.firstName);
+            if (person.middleName) parts.push(person.middleName);
+            return parts.join(' ') || 'Без имени';
         },
 
         formatDate(dateString) {
@@ -689,7 +928,7 @@ const FamilyTreeComponent = {
 
                 // Обновляем персону через API
                 await axios.put(
-                    `http://localhost:8080/api/persons/${this.editFormData.id}`,
+                    this.apiUrl(`http://localhost:8080/api/persons/${this.editFormData.id}`),
                     personData
                 );
 
@@ -702,7 +941,6 @@ const FamilyTreeComponent = {
                 }, 1000);
 
             } catch (error) {
-                console.error('❌ Ошибка обновления персоны:', error);
                 this.editFormError = 'Ошибка при сохранении: ' +
                     (error.response?.data?.message || error.message);
             } finally {
@@ -715,13 +953,11 @@ const FamilyTreeComponent = {
             this.$nextTick(() => {
                 const treeElement = document.getElementById('tree');
                 if (!treeElement) {
-                    console.error('Элемент #tree не найден');
                     return;
                 }
 
                 // Проверяем, что библиотека FamilyTree загружена
                 if (typeof FamilyTree === 'undefined') {
-                    console.error('Библиотека FamilyTree не загружена');
                     this.error = 'Библиотека FamilyTree не загружена. Проверьте подключение скрипта.';
                     return;
                 }
@@ -730,7 +966,84 @@ const FamilyTreeComponent = {
                 this.setupTemplates();
 
                 // Преобразуем данные
-                const familyData = this.persons.map(p => this.convertPersonToFamilyTreeFormat(p));
+                let familyData = this.persons.map(p => this.convertPersonToFamilyTreeFormat(p));
+
+                // Убеждаемся, что все родители включены в данные
+                // Это важно для правильного раскрытия/коллапса вложенных деревьев
+                // Рекурсивно находим всех родителей, включая родителей партнеров
+                const allPersonIds = new Set(familyData.map(n => n.id));
+                const missingParents = new Set();
+
+                // Функция для рекурсивного поиска всех родителей
+                const findMissingParents = (nodeId) => {
+                    const node = familyData.find(n => n.id === nodeId);
+                    if (!node) return;
+
+                    // Проверяем отца
+                    if (node.fid && !allPersonIds.has(node.fid)) {
+                        const parent = this.persons.find(p => p.id === node.fid);
+                        if (parent && !missingParents.has(parent.id)) {
+                            missingParents.add(parent.id);
+                            // Рекурсивно ищем родителей этого родителя
+                            findMissingParents(node.fid);
+                        }
+                    }
+
+                    // Проверяем мать
+                    if (node.mid && !allPersonIds.has(node.mid)) {
+                        const parent = this.persons.find(p => p.id === node.mid);
+                        if (parent && !missingParents.has(parent.id)) {
+                            missingParents.add(parent.id);
+                            // Рекурсивно ищем родителей этого родителя
+                            findMissingParents(node.mid);
+                        }
+                    }
+
+                    // Проверяем родителей партнеров
+                    if (node.pids && node.pids.length > 0) {
+                        node.pids.forEach(partnerId => {
+                            const partner = familyData.find(n => n.id === partnerId);
+                            if (partner) {
+                                findMissingParents(partnerId);
+                            }
+                        });
+                    }
+                };
+
+                // Находим всех недостающих родителей для всех узлов
+                familyData.forEach(node => {
+                    findMissingParents(node.id);
+                });
+
+                // Добавляем недостающих родителей
+                if (missingParents.size > 0) {
+                    const missingNodes = Array.from(missingParents)
+                        .map(id => {
+                            const parent = this.persons.find(p => p.id === id);
+                            return parent ? this.convertPersonToFamilyTreeFormat(parent) : null;
+                        })
+                        .filter(n => n !== null);
+                    familyData = familyData.concat(missingNodes);
+                }
+
+                // Убеждаемся, что супружеские связи двусторонние
+                // Если у узла A есть pids: [B], то у узла B тоже должно быть pids: [A]
+                familyData.forEach(node => {
+                    if (node.pids && node.pids.length > 0) {
+                        node.pids.forEach(partnerId => {
+                            const partnerNode = familyData.find(n => n.id === partnerId);
+                            if (partnerNode) {
+                                // Убеждаемся, что у партнера тоже есть связь обратно
+                                if (!partnerNode.pids) {
+                                    partnerNode.pids = [];
+                                }
+                                if (!partnerNode.pids.includes(node.id)) {
+                                    partnerNode.pids.push(node.id);
+                                }
+                            }
+                        });
+                    }
+                });
 
                 // Создаем кастомную форму редактирования
                 const customEditForm = this.createCustomEditForm();
@@ -745,7 +1058,6 @@ const FamilyTreeComponent = {
 
                 // Обработчик для пункта "Детали"
                 const detailsHandler = (nodeId) => {
-                    console.log('✅ Клик на "Детали", ID:', nodeId);
                     self.$router.push(`/persons/${nodeId}`);
                 };
 
@@ -764,7 +1076,6 @@ const FamilyTreeComponent = {
                             text: "Редактировать",
                             icon: FamilyTree.icon.edit(24, 24, '#aeaeae'),
                             onClick: function (nodeId) {
-                                console.log('✅ Клик на "Редактировать", ID:', nodeId);
                                 self.openEditForm(nodeId, 'edit');
                             }
                         }
@@ -805,6 +1116,33 @@ const FamilyTreeComponent = {
                     }
                 });
 
+                // Функция для нахождения корневого узла (поднимается по родителям до самого верха)
+                // Поднимается по матери (mid) до самого верха дерева
+                const getRootOf = (node) => {
+                    if (!node) {
+                        return null;
+                    }
+                    let current = node;
+                    let iterations = 0;
+                    const maxIterations = 100; // Защита от бесконечного цикла
+
+                    while (current && iterations < maxIterations) {
+                        iterations++;
+                        const mid = current.mid;
+                        if (!mid) {
+                            break;
+                        }
+
+                        const parentNode = self.family.getNode(mid);
+                        if (!parentNode) {
+                            break;
+                        }
+
+                        current = parentNode;
+                    }
+
+                    return current;
+                };
 
                 // Обработчик клика на узел - открываем форму в режиме просмотра
                 this.family.on('node-click', (sender, args) => {
@@ -814,9 +1152,9 @@ const FamilyTreeComponent = {
                     }
                 });
 
+
                 // Добавляем обработчик клика через DOM после загрузки дерева
                 this.family.on('ready', () => {
-                    console.log('Дерево готово, добавляем обработчики клика');
                     const self = this;
                     setTimeout(() => {
                         const treeSvg = treeElement.querySelector('svg');
@@ -826,7 +1164,9 @@ const FamilyTreeComponent = {
                             const treeContainer = treeElement;
                             treeContainer.addEventListener('click', (e) => {
                                 let target = e.target;
+
                                 // Ищем элемент меню "Детали"
+                                // НЕ перехватываем клики на иконку дерева - позволяем библиотеке обработать их стандартным образом
                                 while (target && target !== treeContainer) {
                                     // Проверяем, является ли это пунктом меню "Детали"
                                     if (target.textContent && target.textContent.includes('Детали')) {
@@ -851,7 +1191,6 @@ const FamilyTreeComponent = {
                                         }
 
                                         if (nodeId) {
-                                            console.log('✅ Перехвачен клик на "Детали" через DOM, ID:', nodeId);
                                             e.preventDefault();
                                             e.stopPropagation();
                                             // Устанавливаем флаг
@@ -882,10 +1221,37 @@ const FamilyTreeComponent = {
                     }, 1000);
                 });
 
+                // Устанавливаем начальный корневой узел при инициализации
+                // Находим первый узел без родителей (или с минимальным количеством родителей)
+                this.family.onInit(() => {
+                    if (familyData.length > 0) {
+                        // Находим узел без родителей или с минимальным количеством родителей
+                        let rootNode = null;
+                        for (const node of familyData) {
+                            if (!node.fid && !node.mid) {
+                                rootNode = node;
+                                break;
+                            }
+                        }
+
+                        // Если не нашли узел без родителей, используем первый узел
+                        if (!rootNode) {
+                            rootNode = familyData[0];
+                        }
+
+                        // Находим корневой узел для выбранного узла
+                        if (rootNode) {
+                            const root = getRootOf(rootNode);
+                            if (root) {
+                                this.family.config.roots = [root.id];
+                                this.family.draw();
+                            }
+                        }
+                    }
+                });
+
                 // Загружаем данные
                 this.family.load(familyData);
-
-                console.log('✅ Семейное дерево инициализировано с', familyData.length, 'узлами');
             });
         },
 

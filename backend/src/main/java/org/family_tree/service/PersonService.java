@@ -3,6 +3,7 @@ package org.family_tree.service;
 import jakarta.transaction.Transactional;
 import org.family_tree.model.Gender;
 import org.family_tree.model.Person;
+import org.family_tree.model.User;
 import org.family_tree.repository.PersonRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -22,24 +23,50 @@ public class PersonService {
         this.personRepository = personRepository;
     }
 
+    // Методы для работы с конкретным пользователем
+    public List<Person> findAllByUser(User user) {
+        return personRepository.findByUser(user);
+    }
+
+    public List<Person> findAllWithRelationsByUser(User user) {
+        return personRepository.findByUser(user);
+    }
+
+    public Optional<Person> findByIdAndUser(Long id, User user) {
+        return personRepository.findByIdAndUser(id, user);
+    }
+
+    public Optional<Person> findByIdWithParentsAndUser(Long id, User user) {
+        return personRepository.findByIdWithParentsAndUser(id, user);
+    }
+
+    // Старые методы для обратной совместимости (deprecated)
+    @Deprecated
     public List<Person> findAll() {
         return personRepository.findAll();
     }
 
-    // Backwards-compatible method expected by some controllers
+    @Deprecated
     public List<Person> findAllWithRelations() {
         return personRepository.findAll();
     }
 
+    @Deprecated
     public Optional<Person> findById(Long id) {
         return personRepository.findById(id);
     }
 
+    @Deprecated
     public Optional<Person> findByIdWithParents(Long id) {
         return personRepository.findByIdWithParents(id);
     }
 
     public Person save(Person person) {
+        return personRepository.save(person);
+    }
+
+    public Person saveForUser(Person person, User user) {
+        person.setUser(user);
         return personRepository.save(person);
     }
 
@@ -50,9 +77,19 @@ public class PersonService {
         }
 
         Person person = personOpt.get();
+        deleteByIdAndUser(id, person.getUser());
+    }
+
+    public void deleteByIdAndUser(Long id, User user) {
+        Optional<Person> personOpt = personRepository.findByIdAndUser(id, user);
+        if (personOpt.isEmpty()) {
+            return;
+        }
+
+        Person person = personOpt.get();
 
         // 1) Снимаем ссылки детей на удаляемого родителя
-        List<Person> children = personRepository.findByParent1OrParent2(person, person);
+        List<Person> children = personRepository.findByParent1OrParent2AndUser(person, person, user);
         for (Person child : children) {
             if (child.getParent1() != null && child.getParent1().getId().equals(id)) {
                 child.setParent1(null);
@@ -63,8 +100,8 @@ public class PersonService {
             personRepository.save(child);
         }
 
-        // 2) Снимаем супружеские связи
-        if (person.getSpouse() != null) {
+        // 2) Снимаем супружеские связи (только если супруг принадлежит тому же пользователю)
+        if (person.getSpouse() != null && person.getSpouse().getUser().getId().equals(user.getId())) {
             Person spouse = person.getSpouse();
             spouse.setSpouse(null);
             personRepository.save(spouse);
@@ -72,8 +109,10 @@ public class PersonService {
 
         List<Person> spouses = personRepository.findBySpouse(person);
         for (Person sp : spouses) {
-            sp.setSpouse(null);
-            personRepository.save(sp);
+            if (sp.getUser().getId().equals(user.getId())) {
+                sp.setSpouse(null);
+                personRepository.save(sp);
+            }
         }
 
         // 3) Удаляем саму персону
@@ -86,6 +125,10 @@ public class PersonService {
 
     public List<Person> findRootPersons() {
         return personRepository.findRootPersons();
+    }
+
+    public List<Person> findRootPersonsByUser(User user) {
+        return personRepository.findRootPersonsByUser(user);
     }
 
     public List<Person> findByGender(Gender gender) {
@@ -101,6 +144,18 @@ public class PersonService {
     public List<Person> findChildren(Long personId) {
         Optional<Person> person = personRepository.findById(personId);
         return person.map(this::findChildren).orElse(new ArrayList<>());
+    }
+
+    public List<Person> findChildrenByUser(Long personId, User user) {
+        Optional<Person> person = personRepository.findByIdAndUser(personId, user);
+        if (person.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<Person> allChildren = personRepository.findByParent1OrParent2(person.get(), person.get());
+        // Фильтруем только детей, принадлежащих этому пользователю
+        return allChildren.stream()
+                .filter(child -> child.getUser().getId().equals(user.getId()))
+                .toList();
     }
 
     public Optional<Person> getParent1(Person person) {
