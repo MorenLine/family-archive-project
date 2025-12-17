@@ -23,7 +23,6 @@ public class PersonService {
         this.personRepository = personRepository;
     }
 
-    // Методы для работы с конкретным пользователем
     public List<Person> findAllByUser(User user) {
         return personRepository.findByUser(user);
     }
@@ -40,7 +39,6 @@ public class PersonService {
         return personRepository.findByIdWithParentsAndUser(id, user);
     }
 
-    // Старые методы для обратной совместимости (deprecated)
     @Deprecated
     public List<Person> findAll() {
         return personRepository.findAll();
@@ -217,8 +215,7 @@ public class PersonService {
     }
 
     private void getAncestorsRecursive(Long personId, List<Person> ancestors, int level) {
-        if (level > 10)
-            return; // Защита от бесконечной рекурсии
+        if (level > 10) return;
 
         Optional<Person> personOpt = findById(personId);
         if (personOpt.isEmpty())
@@ -245,8 +242,7 @@ public class PersonService {
     }
 
     private void getDescendantsRecursive(Long personId, List<Person> descendants, int level) {
-        if (level > 10)
-            return; // Защита от бесконечной рекурсии
+        if (level > 10) return;
 
         List<Person> children = findChildren(personId);
         descendants.addAll(children);
@@ -263,8 +259,7 @@ public class PersonService {
     }
 
     private void buildFamilyTreeRecursive(Long personId, List<Person> tree, int level) {
-        if (level > 5)
-            return; // Ограничиваем глубину дерева
+        if (level > 5) return;
 
         Optional<Person> personOpt = findById(personId);
         if (personOpt.isEmpty())

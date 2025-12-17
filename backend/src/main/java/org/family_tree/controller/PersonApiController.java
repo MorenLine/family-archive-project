@@ -44,7 +44,6 @@ public class PersonApiController {
         User targetUser = resolveTargetUser(userId, currentUser);
 
         List<Person> persons = personService.findAllWithRelationsByUser(targetUser);
-        // Очищаем циклические ссылки
         persons.forEach(this::cleanCircularReferences);
         return ResponseEntity.ok(persons);
     }
@@ -57,10 +56,6 @@ public class PersonApiController {
 
         Optional<Person> person = personService.findByIdWithParentsAndUser(id, targetUser);
         return person.map(p -> {
-            // Загружаем супруга если есть
-            if (p.getSpouse() != null) {
-                // Супруг уже загружен через LAZY, но нужно очистить его циклические ссылки
-            }
             cleanCircularReferences(p);
             return ResponseEntity.ok(p);
         }).orElse(ResponseEntity.notFound().build());
@@ -97,7 +92,6 @@ public class PersonApiController {
         }
         person.setBiography((String) personData.get("biography"));
         
-        // Обрабатываем родителей (только из текущего пользователя)
         if (personData.get("parent1") != null) {
             Map<String, Object> parent1Data = (Map<String, Object>) personData.get("parent1");
             Long parent1Id = ((Number) parent1Data.get("id")).longValue();
