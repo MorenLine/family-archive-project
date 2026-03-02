@@ -1,0 +1,12 @@
+.git/
+.gitignore
+target/
+.idea/
+.vscode/
+*.iml
+*.log
+.DS_Store
+node_modules/
+Отчёт_КР_Семейный_Архив.md
+Структура.txt
+

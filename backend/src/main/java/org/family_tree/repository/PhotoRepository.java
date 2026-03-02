@@ -29,4 +29,6 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
 
     List<Photo> findByPersonId(Long personId);
 
+    Optional<Photo> findByFileName(String fileName);
+
 }
